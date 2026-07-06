@@ -11,6 +11,8 @@ Use este checklist antes de submeter o add-on para revisão no Google Workspace 
 
 ## 2. OAuth Consent Screen
 
+> **Aviso "App não verificado":** normal no DEV. Para produção sem esse aviso, veja [oauth-verification.md](./oauth-verification.md).
+
 - [ ] Configurar em [Google Cloud Console → APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
 - [ ] Tipo de usuário: **Internal** (apenas domínio) ou **External** (público)
 - [ ] Nome do app: `Lead Control - Novo Lead`

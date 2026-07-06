@@ -17,6 +17,7 @@ Add-on do Google Workspace para Planilhas que envia automaticamente novos leads 
 | [api-contract.md](./api-contract.md) | Contrato da API Lead Control |
 | [ai-context.md](./ai-context.md) | Contexto estruturado para assistentes de IA |
 | [marketplace-checklist.md](./marketplace-checklist.md) | Checklist de publicação no Google Workspace Marketplace |
+| [oauth-verification.md](./oauth-verification.md) | Como remover o aviso "App não verificado" em produção |
 
 ## Links rápidos
 

@@ -57,6 +57,14 @@ Cole os valores em **GitHub → Settings → Secrets and variables → Actions**
 
 Consulte [marketplace-checklist.md](./marketplace-checklist.md) para o checklist completo de publicação.
 
+### Tela "App não verificado" no OAuth
+
+Durante o DEV, o Google exibe *"O Google não verificou este app"*. Isso é esperado.
+
+Para **remover o aviso em produção**, é necessário passar pela **verificação OAuth do Google** e publicar via Marketplace — não é corrigível apenas com deploy de código.
+
+Guia completo: [oauth-verification.md](./oauth-verification.md)
+
 ### Resumo do processo
 
 1. Vincular projeto Apps Script PROD a um Google Cloud Project
