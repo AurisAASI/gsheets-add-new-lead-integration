@@ -442,8 +442,13 @@ export function handleTestLastRow(): GoogleAppsScript.Card_Service.ActionRespons
 
   const result = processLastRow();
   if (result.success) {
-    logInfo('ui', `Teste de envio concluído | ${result.message}`);
-    showSuccessToast(result.message);
+    if (result.outcome === 'duplicate') {
+      logInfo('ui', `Teste de envio concluído (duplicado) | ${result.message}`);
+      showInfoToast(result.message);
+    } else {
+      logInfo('ui', `Teste de envio concluído | ${result.message}`);
+      showSuccessToast(result.message);
+    }
   } else {
     logError('ui', `Teste de envio falhou | ${result.message}`);
     showErrorToast(result.message);
@@ -489,8 +494,13 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
 
   if (result.success) {
     saveConfig({lastProcessedRow: lastRow});
-    logInfo('ui', `Reprocessamento concluído | linha=${lastRow} | ${result.message}`);
-    showSuccessToast(result.message);
+    if (result.outcome === 'duplicate') {
+      logInfo('ui', `Reprocessamento concluído (duplicado) | linha=${lastRow} | ${result.message}`);
+      showInfoToast(result.message);
+    } else {
+      logInfo('ui', `Reprocessamento concluído | linha=${lastRow} | ${result.message}`);
+      showSuccessToast(result.message);
+    }
   } else {
     logError('ui', `Reprocessamento falhou | linha=${lastRow} | ${result.message}`);
     showErrorToast(result.message);

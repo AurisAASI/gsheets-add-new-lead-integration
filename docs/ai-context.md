@@ -42,6 +42,7 @@ Google Workspace Add-on for Google Sheets that automatically sends new lead rows
 6. **`clasp push` ≠ deploy** — Marketplace users see `clasp deploy` versions, not @HEAD
 7. **Required API fields:** `fullName`, `phone`, `city`, `companyID`, `source`
 8. **Column mapping** is case-insensitive: `nome`→`fullName`, `telefone`→`phone`, `cidade`→`city`, `email`→`email`, `fonte`→`source`, `status`→`statusLead`
+9. **Idempotent API responses** (`IDEMPOTENT_API_RULES` in `leadClient.ts`) are treated as success — cursor advances, no error toast, no reprocessing (e.g. HTTP 409 "already exists")
 
 ## Data flow
 
@@ -51,7 +52,7 @@ External integration → Sheets API append row
   → onChangeHandler checks auth + enabled + debounce
   → processNewRows: rows (lastProcessedRow+1)..getLastRow()
   → leadMapper.mapRowToLead → leadClient.sendLeadToApi
-  → update lastProcessedRow
+  → update lastProcessedRow (per row; stops on real errors)
   → toast feedback
 ```
 

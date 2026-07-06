@@ -68,6 +68,7 @@ Linhas com campos obrigatórios ausentes são **ignoradas** (não bloqueiam o pr
 | `201` | Criado | Toast de sucesso |
 | `400` | Payload inválido | Toast de erro com corpo da resposta |
 | `401`/`403` | Autenticação | Toast de erro — verificar API Key |
+| `409` | Lead já existe (telefone duplicado) | Sucesso idempotente — cursor avança, sem toast de erro |
 | `5xx` | Erro servidor | Toast de erro — log no Stackdriver |
 
 ## Exemplo de implementação

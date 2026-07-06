@@ -1,4 +1,4 @@
-import {sendLeadToApi} from '../api/leadClient';
+import {sendLeadToApi, SendLeadOutcome} from '../api/leadClient';
 import {
   getConfig,
   getConfiguredSheet,
@@ -150,6 +150,7 @@ export function processNewRows(
   let sent = 0;
   let skipped = 0;
   let errors = 0;
+  let processedUntil = config.lastProcessedRow;
   const errorMessages: string[] = [];
 
   for (let row = startRow; row <= lastRow; row++) {
@@ -160,13 +161,18 @@ export function processNewRows(
     if (result.errorMessage) {
       errorMessages.push(result.errorMessage);
     }
-  }
 
-  setLastProcessedRow(lastRow);
+    if (result.errors > 0) {
+      break;
+    }
+
+    setLastProcessedRow(row);
+    processedUntil = row;
+  }
 
   logInfo(
       'onChange',
-      `Lote concluído | ${formatBatchSummary(sent, skipped, errors, lastRow)}`,
+      `Lote concluído | ${formatBatchSummary(sent, skipped, errors, processedUntil)}`,
   );
 
   if (errorMessages.length > 0) {
@@ -179,12 +185,12 @@ export function processNewRows(
     logError('onChange', `Erros no lote | ${preview}${suffix}`);
   }
 
-  return {sent, skipped, errors, processedUntil: lastRow, errorMessages};
+  return {sent, skipped, errors, processedUntil, errorMessages};
 }
 
 export function processLastRow(
     spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
-): {success: boolean; message: string} {
+): {success: boolean; message: string; outcome?: SendLeadOutcome} {
   const config = getConfig();
   const sheet = getConfiguredSheet(spreadsheet);
 
@@ -217,7 +223,7 @@ export function processLastRow(
   }
 
   const result = sendLeadToApi(lead, config, {row: lastRow});
-  return {success: result.success, message: result.message};
+  return {success: result.success, message: result.message, outcome: result.outcome};
 }
 
 export function onChangeHandler(e: GoogleAppsScript.Events.SheetsOnChange): void {

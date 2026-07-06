@@ -1,8 +1,11 @@
 import {logError, logInfo, sanitizeEndpoint, truncateText} from '../logging/logger';
 import {IntegrationConfig, LeadPayload} from '../types';
 
+export type SendLeadOutcome = 'created' | 'duplicate' | 'error';
+
 export interface SendLeadResult {
   success: boolean;
+  outcome: SendLeadOutcome;
   statusCode: number;
   message: string;
 }
@@ -11,8 +14,42 @@ export interface SendLeadContext {
   row?: number;
 }
 
+interface IdempotentApiRule {
+  statusCode: number;
+  messagePattern?: RegExp;
+}
+
+const IDEMPOTENT_API_RULES: IdempotentApiRule[] = [
+  {
+    statusCode: 409,
+    messagePattern: /already exists/i,
+  },
+];
+
 function formatRowContext(row?: number): string {
   return row !== undefined ? `linha=${row}` : 'linha=manual';
+}
+
+function extractResponseMessage(responseBody: string): string {
+  try {
+    const parsed = JSON.parse(responseBody) as {message?: string};
+    return parsed.message || responseBody;
+  } catch {
+    return responseBody;
+  }
+}
+
+function isIdempotentApiResponse(statusCode: number, responseBody: string): boolean {
+  const message = extractResponseMessage(responseBody);
+  return IDEMPOTENT_API_RULES.some((rule) => {
+    if (rule.statusCode !== statusCode) {
+      return false;
+    }
+    if (rule.messagePattern && !rule.messagePattern.test(message)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function sendLeadToApi(
@@ -47,8 +84,19 @@ export function sendLeadToApi(
       logInfo('api', `Lead enviado | ${rowLabel} | status=${statusCode}`);
       return {
         success: true,
+        outcome: 'created',
         statusCode,
         message: `Lead ${lead.fullName} enviado com sucesso.`,
+      };
+    }
+
+    if (isIdempotentApiResponse(statusCode, responseBody)) {
+      logInfo('api', `Lead já existente | ${rowLabel} | status=${statusCode}`);
+      return {
+        success: true,
+        outcome: 'duplicate',
+        statusCode,
+        message: 'Lead já cadastrado para esta empresa (telefone duplicado).',
       };
     }
 
@@ -56,6 +104,7 @@ export function sendLeadToApi(
     logError('api', `Falha HTTP | ${rowLabel} | status=${statusCode}`, responseBody);
     return {
       success: false,
+      outcome: 'error',
       statusCode,
       message: errorMessage,
     };
@@ -64,6 +113,7 @@ export function sendLeadToApi(
     logError('api', `Falha na requisição | ${rowLabel}`, message);
     return {
       success: false,
+      outcome: 'error',
       statusCode: 0,
       message: `Falha na requisição: ${message}`,
     };
