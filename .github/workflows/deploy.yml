@@ -26,7 +26,7 @@ jobs:
         run: echo '${{ secrets.CLASP_JSON_DEV }}' > .clasp.dev.json
 
       - name: Push to Apps Script (DEV)
-        run: clasp -P .clasp.dev.json push --force
+        run: npx clasp -P .clasp.dev.json push --force
 
   deploy-prod:
     if: github.ref == 'refs/heads/main'
@@ -50,9 +50,9 @@ jobs:
         run: echo '${{ secrets.CLASP_JSON_PROD }}' > .clasp.prod.json
 
       - name: Push to Apps Script (PROD)
-        run: clasp -P .clasp.prod.json push --force
+        run: npx clasp -P .clasp.prod.json push --force
 
       - name: Deploy version
         run: |
-          clasp -P .clasp.prod.json deploy \
+          npx clasp -P .clasp.prod.json deploy \
             --description "CI deploy ${GITHUB_SHA::7} $(date -u +%Y-%m-%dT%H:%M:%SZ)"
