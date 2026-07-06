@@ -51,11 +51,20 @@ Preencha os `scriptId` nos arquivos `.clasp.*.json` com os IDs dos projetos cria
 
 ## Ciclo de desenvolvimento
 
+### Local (antes do merge)
+
 1. Edite arquivos em `src/`
 2. `npm run verify` — valida build localmente
-3. `npm run push:dev` — envia para o projeto DEV
+3. `npm run push:dev` — envia para o projeto DEV (opcional; o CI também faz deploy em `develop`)
 4. Teste na planilha vinculada ao projeto DEV
-5. Quando estável: `npm run deploy:prod`
+
+### Via CI (recomendado)
+
+1. Abra PR da feature branch para `develop`
+2. Após merge em `develop`, o CI publica automaticamente no Apps Script DEV
+3. Teste na planilha DEV (`npm run logs:dev` para acompanhar logs)
+4. Quando estável, abra PR de `develop` → `main`
+5. Após merge em `main` e aprovação no GitHub Environment `production`, o CI publica em PROD
 
 ## Planilha de teste
 
@@ -155,8 +164,8 @@ Execução com erro de API:
 | 401 na API | Verifique API Key e endpoint |
 | Reautorização necessária | Abra o add-on pelo menu Extensões e autorize novamente |
 
-## Estrutura de branches sugerida
+## Estrutura de branches
 
-- `main` — código estável, deploy automático para prod (se CI configurado)
-- `develop` — integração de features
-- feature branches — `feature/nome-da-feature`
+- `develop` — integração de features; push dispara deploy automático para DEV
+- `main` — código estável; push dispara deploy para PROD (com aprovação no Environment `production`)
+- feature branches — `feature/nome-da-feature` → PR para `develop`

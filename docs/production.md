@@ -32,14 +32,22 @@ clasp -P .clasp.prod.json deploy --description "v1.0.0 - descrição"
 
 ## CI/CD com GitHub Actions
 
-O workflow em [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) automatiza deploy em push para `main`.
+O workflow em [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) separa deploy por branch:
+
+| Branch | Job | Ação |
+|--------|-----|------|
+| `develop` | `deploy-dev` | `clasp push` no projeto DEV |
+| `main` | `deploy-prod` | `clasp push` + `clasp deploy` no projeto PROD |
+
+Fluxo recomendado: feature → PR para `develop` → testes em DEV → PR `develop` → `main` → aprovação → PROD.
 
 ### Secrets necessários
 
 | Secret | Descrição |
 |--------|-----------|
 | `CLASPRC_JSON` | Conteúdo de `~/.clasprc.json` (credenciais OAuth do clasp) |
-| `CLASP_JSON_PROD` | Conteúdo de `.clasp.prod.json` (scriptId do projeto prod) |
+| `CLASP_JSON_DEV` | Conteúdo de `.clasp.dev.json` (scriptId do projeto DEV) |
+| `CLASP_JSON_PROD` | Conteúdo de `.clasp.prod.json` (scriptId do projeto PROD) |
 
 ### Configurar secrets
 
@@ -47,11 +55,24 @@ O workflow em [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) 
 # Gerar CLASPRC_JSON (na máquina com clasp login)
 cat ~/.clasprc.json
 
+# Gerar CLASP_JSON_DEV
+cat .clasp.dev.json
+
 # Gerar CLASP_JSON_PROD
 cat .clasp.prod.json
 ```
 
 Cole os valores em **GitHub → Settings → Secrets and variables → Actions**.
+
+### Environment de produção (aprovação manual)
+
+Para evitar deploy acidental em PROD, configure um GitHub Environment:
+
+1. **GitHub → Settings → Environments → New environment** → nome: `production`
+2. Ative **Required reviewers** (pelo menos 1 pessoa da equipa)
+3. Opcional: restrinja deploys apenas à branch `main`
+
+O job `deploy-prod` usa `environment: production`. Após merge em `main`, o workflow pausa até um revisor aprovar no GitHub Actions.
 
 ## Google Workspace Marketplace
 
