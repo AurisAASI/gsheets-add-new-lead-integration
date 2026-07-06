@@ -1,3 +1,4 @@
+import {logWarn} from '../logging/logger';
 import {
   ColumnMappings,
   DEFAULT_COLUMN_MAPPINGS,
@@ -35,6 +36,7 @@ function parseColumnMappings(value: string | null): ColumnMappings {
     const parsed = JSON.parse(value) as Partial<ColumnMappings>;
     return {...DEFAULT_COLUMN_MAPPINGS, ...parsed};
   } catch {
+    logWarn('config', 'Mapeamento de colunas corrompido — usando valores padrão');
     return {...DEFAULT_COLUMN_MAPPINGS};
   }
 }

@@ -52,6 +52,7 @@ src/
 ├── config/settings.ts      # Leitura/gravação de DocumentProperties
 ├── mapping/leadMapper.ts   # Mapeamento colunas PT → payload API
 ├── api/leadClient.ts       # UrlFetchApp POST para Lead Control
+├── logging/logger.ts       # Logging padronizado para Stackdriver / Execuções
 ├── triggers/
 │   ├── triggerManager.ts   # Criação/remoção de triggers installable
 │   └── onChangeHandler.ts  # Handler principal + processamento de linhas

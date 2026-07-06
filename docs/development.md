@@ -95,11 +95,55 @@ O trigger `onChange` dispara com append via API. Para testar sem integração re
 
 ### Logs
 
+O add-on registra mensagens padronizadas via `console.log` / `console.warn` / `console.error`, visíveis no Stackdriver e no histórico de execuções do Apps Script.
+
+**Formato:**
+
+```
+[LeadControl][contexto] mensagem
+```
+
+**Contextos:**
+
+| Contexto | Onde aparece |
+|----------|--------------|
+| `onChange` | Trigger automático — início, processamento de linhas, resumo do lote |
+| `api` | Envio HTTP para o Lead Control (sucesso, HTTP erro, falha de rede) |
+| `trigger` | Criação/remoção de triggers e reautorização |
+| `config` | Problemas na configuração persistida (ex.: JSON corrompido) |
+| `ui` | Ações manuais no painel (salvar, desativar, testar, reprocessar) |
+| `install` | Instalação do add-on (`onInstall`) |
+
+**Onde ver:**
+
 ```bash
 npm run logs:dev
 ```
 
-Ou no editor Apps Script: **Execuções** → ver histórico.
+Ou no editor Apps Script: **Execuções** → selecione uma execução → abra os logs.
+
+**Exemplos:**
+
+Execução bem-sucedida:
+
+```
+[LeadControl][onChange] Iniciado | changeType=INSERT_ROW | enabled=true | aba=Base Dados
+[LeadControl][onChange] Processando linhas | aba=Base Dados | startRow=5 | lastRow=5 | lastProcessedRow=4
+[LeadControl][api] Enviando lead | linha=5 | nome=João Silva | endpoint=api.leadcontrol.ia.br
+[LeadControl][api] Lead enviado | linha=5 | status=201
+[LeadControl][onChange] Lote concluído | enviados=1 | ignorados=0 | erros=0 | atéLinha=5
+[LeadControl][onChange] Concluído | enviados=1 | ignorados=0 | erros=0 | atéLinha=5
+```
+
+Execução com erro de API:
+
+```
+[LeadControl][api] Falha HTTP | linha=7 | status=401 | Unauthorized
+[LeadControl][onChange] Erros no lote | Linha 7: Erro 401: Unauthorized
+[LeadControl][onChange] Concluído | enviados=0 | ignorados=0 | erros=1 | atéLinha=7
+```
+
+**Segurança:** credenciais (`apiKey`) e payload completo nunca são logados. O endpoint aparece apenas como host.
 
 ### Problemas comuns
 

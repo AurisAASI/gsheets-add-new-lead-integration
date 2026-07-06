@@ -5,6 +5,7 @@ import {
   isConfigComplete,
   saveConfig,
 } from '../config/settings';
+import {logError, logInfo, logWarn} from '../logging/logger';
 import {
   FIELD_LABELS_PT,
   getSheetHeaders,
@@ -364,6 +365,7 @@ export function handleSaveConfiguration(
   const merged = {...getConfig(), ...draft};
 
   if (!isConfigComplete(merged)) {
+    logWarn('ui', 'Salvar configuração rejeitado | credenciais incompletas');
     showErrorToast('Preencha URL do endpoint, Chave de API, ID da empresa e nome da aba.');
     return CardService.newActionResponseBuilder()
         .setNotification(
@@ -377,6 +379,7 @@ export function handleSaveConfiguration(
         .filter(({key, required}) => required && !columnMappings[key])
         .map(({key}) => FIELD_LABELS_PT[key])
         .join(', ');
+    logWarn('ui', `Salvar configuração rejeitado | mapeamento incompleto: ${missingLabels}`);
     showErrorToast(`Mapeie as colunas obrigatórias: ${missingLabels}.`);
     return CardService.newActionResponseBuilder()
         .setNotification(
@@ -388,11 +391,17 @@ export function handleSaveConfiguration(
   const previous = getConfig();
   saveConfig(draft);
 
+  let initializedRow = previous.lastProcessedRow;
   if (previous.lastProcessedRow === 0) {
-    initializeLastProcessedRow();
+    initializedRow = initializeLastProcessedRow();
   }
 
   setupChangeTrigger();
+  logInfo(
+      'ui',
+      `Configuração salva e ativada | aba=${sheetName} | ` +
+      `lastProcessedRow=${initializedRow}`,
+  );
   showSuccessToast('Configuração salva e integração ativada.');
 
   return CardService.newActionResponseBuilder()
@@ -408,6 +417,7 @@ export function handleSaveConfiguration(
 export function handleDisableIntegration(): GoogleAppsScript.Card_Service.ActionResponse {
   saveConfig({enabled: false});
   removeChangeTrigger();
+  logInfo('ui', 'Integração desativada pelo usuário');
   showInfoToast('Integração desativada.');
 
   return CardService.newActionResponseBuilder()
@@ -432,8 +442,10 @@ export function handleTestLastRow(): GoogleAppsScript.Card_Service.ActionRespons
 
   const result = processLastRow();
   if (result.success) {
+    logInfo('ui', `Teste de envio concluído | ${result.message}`);
     showSuccessToast(result.message);
   } else {
+    logError('ui', `Teste de envio falhou | ${result.message}`);
     showErrorToast(result.message);
   }
 
@@ -477,8 +489,10 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
 
   if (result.success) {
     saveConfig({lastProcessedRow: lastRow});
+    logInfo('ui', `Reprocessamento concluído | linha=${lastRow} | ${result.message}`);
     showSuccessToast(result.message);
   } else {
+    logError('ui', `Reprocessamento falhou | linha=${lastRow} | ${result.message}`);
     showErrorToast(result.message);
   }
 
