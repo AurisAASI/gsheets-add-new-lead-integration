@@ -1,12 +1,38 @@
-name: Deploy to Production
+name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [develop, main]
 
 jobs:
-  deploy:
+  deploy-dev:
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run verify
+
+      - name: Setup clasp credentials
+        run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+
+      - name: Setup clasp project config
+        run: echo '${{ secrets.CLASP_JSON_DEV }}' > .clasp.dev.json
+
+      - name: Push to Apps Script (DEV)
+        run: npx clasp -P .clasp.dev.json push --force
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod
     steps:
       - uses: actions/checkout@v4
 
@@ -24,10 +50,10 @@ jobs:
       - name: Setup clasp project config
         run: echo '${{ secrets.CLASP_JSON_PROD }}' > .clasp.prod.json
 
-      - name: Push to Apps Script
-        run: clasp -P .clasp.prod.json push --force
+      - name: Push to Apps Script (PROD)
+        run: npx clasp -P .clasp.prod.json push --force
 
       - name: Deploy version
         run: |
-          clasp -P .clasp.prod.json deploy \
+          npx clasp -P .clasp.prod.json deploy \
             --description "CI deploy ${GITHUB_SHA::7} $(date -u +%Y-%m-%dT%H:%M:%SZ)"
