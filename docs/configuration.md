@@ -8,16 +8,37 @@ Este guia é destinado ao usuário final que instala o add-on Lead Control na pl
 2. Abra a planilha onde os leads serão recebidos
 3. Vá em **Extensões** → **Lead Control - Novo Lead**
 
+## O que o add-on faz
+
+O add-on faz a ponte entre sua planilha Google e o Lead Control: ele monitora a aba configurada e envia cada nova linha como lead para o sistema, linha a linha, assim que ela é adicionada.
+
 ## Configuração inicial
 
-No painel do add-on, preencha:
+No painel do add-on, as credenciais de integração estão disponíveis em **Configurações → Integração** no [Lead Control](https://app.leadcontrol.ia.br).
+
+Preencha:
 
 | Campo | Onde obter |
 |-------|-----------|
-| **API Endpoint** | Painel Lead Control → Integrações → Google Planilhas |
-| **API Key** | Painel Lead Control → Integrações → Google Planilhas |
-| **Company ID** | Painel Lead Control → Integrações → Google Planilhas |
+| **URL do endpoint** | Lead Control → Configurações → Integração |
+| **Chave de API** | Lead Control → Configurações → Integração |
+| **ID da empresa** | Lead Control → Configurações → Integração |
 | **Nome da aba** | Nome da aba da planilha que recebe os leads (padrão: `Base Dados`) |
+
+### Mapeamento de colunas
+
+Na seção **Mapeamento de colunas**, selecione para cada informação do lead qual coluna da planilha corresponde a ela. Os dropdowns listam os cabeçalhos da linha 1 da aba configurada.
+
+| Informação | Obrigatório | Descrição |
+|------------|-------------|-----------|
+| Nome completo | Sim | Nome completo do lead |
+| Telefone | Sim | Telefone de contato |
+| Cidade | Sim | Cidade |
+| Fonte | Sim | Origem do lead |
+| E-mail | Não | E-mail (pode ficar sem mapear) |
+| Status do lead | Não | Status inicial (padrão: `Aguardando contato` se não mapear) |
+
+Se você alterar os cabeçalhos da planilha ou o nome da aba, clique em **Atualizar colunas** para recarregar as opções.
 
 Clique em **Salvar e ativar**.
 
@@ -26,20 +47,13 @@ Ao salvar pela primeira vez, o add-on:
 - Configura o monitoramento automático de novas linhas
 - **Não reenvia** leads que já existiam na planilha antes da ativação
 
+### Compatibilidade
+
+Planilhas já configuradas antes desta versão continuam funcionando com o mapeamento padrão (`nome`, `telefone`, `cidade`, `fonte`, `email`, `status`) até que o usuário salve uma nova configuração.
+
 ## Estrutura da planilha
 
-A primeira linha da aba deve conter os cabeçalhos (nomes das colunas):
-
-| Coluna | Obrigatório | Descrição |
-|--------|-------------|-----------|
-| `nome` | Sim | Nome completo do lead |
-| `telefone` | Sim | Telefone de contato |
-| `cidade` | Sim | Cidade |
-| `email` | Não | E-mail |
-| `fonte` | Não | Origem do lead (padrão: `Planilha Funil`) |
-| `status` | Não | Status inicial (padrão: `Aguardando contato`) |
-
-Os nomes das colunas não diferenciam maiúsculas/minúsculas.
+A primeira linha da aba deve conter cabeçalhos (nomes das colunas). Os nomes podem ser quaisquer — o que importa é o mapeamento feito no painel do add-on. A comparação de cabeçalhos não diferencia maiúsculas/minúsculas.
 
 ## Como funciona o envio automático
 
@@ -52,7 +66,8 @@ Os nomes das colunas não diferenciam maiúsculas/minúsculas.
 
 | Botão | Função |
 |-------|--------|
-| **Salvar e ativar** | Salva credenciais e ativa o monitoramento |
+| **Salvar e ativar** | Salva credenciais, mapeamento e ativa o monitoramento |
+| **Atualizar colunas** | Recarrega os cabeçalhos da planilha nos dropdowns |
 | **Desativar integração** | Para o envio automático |
 | **Testar envio (última linha)** | Envia manualmente a última linha (útil para teste) |
 | **Reprocessar última linha** | Reenvia a última linha mesmo que já tenha sido processada |
@@ -62,8 +77,9 @@ Os nomes das colunas não diferenciam maiúsculas/minúsculas.
 | Sintoma | Possível causa | Ação |
 |---------|---------------|------|
 | Leads não são enviados | Integração desativada | Abra o add-on e clique em Salvar e ativar |
-| Erro de campos ausentes | Colunas com nomes diferentes | Verifique cabeçalhos da planilha |
-| Erro 401/403 na API | API Key incorreta | Verifique credenciais no painel Lead Control |
+| Erro de campos ausentes | Mapeamento incorreto ou dados vazios | Verifique mapeamento e conteúdo da linha |
+| Dropdowns vazios | Aba inexistente ou sem cabeçalhos | Confira nome da aba e linha 1; clique em Atualizar colunas |
+| Erro 401/403 na API | Chave de API incorreta | Verifique credenciais no [Lead Control](https://app.leadcontrol.ia.br) |
 | Add-on pede reautorização | Atualização do add-on | Autorize novamente pelo menu Extensões |
 
 ## Suporte

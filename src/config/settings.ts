@@ -1,8 +1,11 @@
 import {
+  ColumnMappings,
+  DEFAULT_COLUMN_MAPPINGS,
   DEFAULT_SHEET_NAME,
   HEADER_ROW,
   IntegrationConfig,
   PROPERTY_KEYS,
+  REQUIRED_COLUMN_FIELDS,
 } from '../types';
 
 function getProps(): GoogleAppsScript.Properties.Properties {
@@ -24,6 +27,18 @@ function parseNumber(value: string | null, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseColumnMappings(value: string | null): ColumnMappings {
+  if (!value) {
+    return {...DEFAULT_COLUMN_MAPPINGS};
+  }
+  try {
+    const parsed = JSON.parse(value) as Partial<ColumnMappings>;
+    return {...DEFAULT_COLUMN_MAPPINGS, ...parsed};
+  } catch {
+    return {...DEFAULT_COLUMN_MAPPINGS};
+  }
+}
+
 export function getConfig(): IntegrationConfig {
   const props = getProps();
   return {
@@ -33,6 +48,7 @@ export function getConfig(): IntegrationConfig {
     sheetName: props.getProperty(PROPERTY_KEYS.SHEET_NAME) || DEFAULT_SHEET_NAME,
     enabled: parseBoolean(props.getProperty(PROPERTY_KEYS.ENABLED)),
     lastProcessedRow: parseNumber(props.getProperty(PROPERTY_KEYS.LAST_PROCESSED_ROW)),
+    columnMappings: parseColumnMappings(props.getProperty(PROPERTY_KEYS.COLUMN_MAPPINGS)),
   };
 }
 
@@ -50,6 +66,7 @@ export function saveConfig(
     [PROPERTY_KEYS.SHEET_NAME]: next.sheetName,
     [PROPERTY_KEYS.ENABLED]: String(next.enabled),
     [PROPERTY_KEYS.LAST_PROCESSED_ROW]: String(next.lastProcessedRow),
+    [PROPERTY_KEYS.COLUMN_MAPPINGS]: JSON.stringify(next.columnMappings),
   });
 
   return next;
@@ -73,6 +90,12 @@ export function isConfigComplete(config: IntegrationConfig): boolean {
       config.apiKey &&
       config.companyId &&
       config.sheetName,
+  );
+}
+
+export function isColumnMappingComplete(config: IntegrationConfig): boolean {
+  return REQUIRED_COLUMN_FIELDS.every(
+      (field) => Boolean(config.columnMappings[field]?.trim()),
   );
 }
 

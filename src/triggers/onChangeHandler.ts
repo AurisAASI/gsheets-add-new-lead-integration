@@ -5,6 +5,7 @@ import {
   setLastProcessedRow,
 } from '../config/settings';
 import {
+  formatMissingFields,
   getMissingRequiredFields,
   mapRowToLead,
   readRowData,
@@ -130,7 +131,7 @@ export function processLastRow(
   if (missing.length > 0) {
     return {
       success: false,
-      message: `Campos obrigatórios ausentes: ${missing.join(', ')}`,
+      message: `Campos obrigatórios ausentes: ${formatMissingFields(missing)}`,
     };
   }
 

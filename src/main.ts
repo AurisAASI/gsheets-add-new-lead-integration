@@ -1,6 +1,7 @@
 import {getConfig, isConfigComplete} from './config/settings';
 import {
   handleDisableIntegration,
+  handleRefreshColumns,
   handleReprocessLastRow,
   handleSaveConfiguration,
   handleTestLastRow,
@@ -24,6 +25,7 @@ const exportedFunctions = {
   onChangeHandler,
   handleSaveConfiguration,
   handleDisableIntegration,
+  handleRefreshColumns,
   handleTestLastRow,
   handleReprocessLastRow,
 };

@@ -17,6 +17,7 @@ const requiredFunctions = [
   'onInstall',
   'handleSaveConfiguration',
   'handleDisableIntegration',
+  'handleRefreshColumns',
   'handleTestLastRow',
   'handleReprocessLastRow',
 ].filter(Boolean);
