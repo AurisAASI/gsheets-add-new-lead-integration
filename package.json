@@ -1,0 +1,29 @@
+{
+  "name": "gsheets-add-new-lead-integration",
+  "version": "1.0.0",
+  "description": "Google Workspace Add-on for Sheets — Lead Control integration",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run build && node scripts/verify-build.mjs",
+    "push:dev": "npm run build && clasp -P .clasp.dev.json push",
+    "push:prod": "npm run build && clasp -P .clasp.prod.json push",
+    "deploy:prod": "npm run push:prod && clasp -P .clasp.prod.json deploy --description \"$(git rev-parse --short HEAD 2>/dev/null || echo manual)\"",
+    "open:dev": "clasp -P .clasp.dev.json open-script",
+    "open:prod": "clasp -P .clasp.prod.json open-script",
+    "logs:dev": "clasp -P .clasp.dev.json logs --watch",
+    "logs:prod": "clasp -P .clasp.prod.json logs --watch"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.3.0",
+    "@types/google-apps-script": "^1.0.97",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.21.0",
+    "eslint-config-google": "^0.14.0",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0"
+  }
+}

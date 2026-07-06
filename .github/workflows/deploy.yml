@@ -1,0 +1,33 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run verify
+
+      - name: Setup clasp credentials
+        run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+
+      - name: Setup clasp project config
+        run: echo '${{ secrets.CLASP_JSON_PROD }}' > .clasp.prod.json
+
+      - name: Push to Apps Script
+        run: clasp -P .clasp.prod.json push --force
+
+      - name: Deploy version
+        run: |
+          clasp -P .clasp.prod.json deploy \
+            --description "CI deploy ${GITHUB_SHA::7} $(date -u +%Y-%m-%dT%H:%M:%SZ)"

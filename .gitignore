@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.clasp.json
+.clasp.dev.json
+.clasp.prod.json
+.clasprc.json
+*.log
+.DS_Store

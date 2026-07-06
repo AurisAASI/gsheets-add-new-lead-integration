@@ -1,0 +1,5 @@
+{
+  "scriptId": "SEU_SCRIPT_ID_PROD",
+  "rootDir": "dist",
+  "fileExtension": "js"
+}
