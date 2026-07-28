@@ -118,7 +118,7 @@ O add-on registra mensagens padronizadas via `console.log` / `console.warn` / `c
 |----------|--------------|
 | `onChange` | Trigger automático — início, processamento de linhas, resumo do lote |
 | `api` | Envio HTTP para o Lead Control (sucesso, HTTP erro, falha de rede) |
-| `trigger` | Criação/remoção de triggers e reautorização |
+| `trigger` | Criação/remoção de triggers e checagem de reautorização |
 | `config` | Problemas na configuração persistida (ex.: JSON corrompido) |
 | `ui` | Ações manuais no painel (salvar, desativar, testar, reprocessar) |
 | `install` | Instalação do add-on (`onInstall`) |

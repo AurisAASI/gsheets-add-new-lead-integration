@@ -80,7 +80,7 @@ A primeira linha da aba deve conter cabeçalhos (nomes das colunas). Os nomes po
 | Erro de campos ausentes | Mapeamento incorreto ou dados vazios | Verifique mapeamento e conteúdo da linha |
 | Dropdowns vazios | Aba inexistente ou sem cabeçalhos | Confira nome da aba e linha 1; clique em Atualizar colunas |
 | Erro 401/403 na API | Chave de API incorreta | Verifique credenciais no [Lead Control](https://app.leadcontrol.ia.br) |
-| Add-on pede reautorização | Atualização do add-on | Autorize novamente pelo menu Extensões |
+| Add-on pede reautorização / leads param após update | Atualização do add-on ou permissões alteradas | Abra Extensões → Lead Control e autorize novamente |
 
 ## Suporte
 

@@ -83,7 +83,7 @@ TypeScript em `src/` é compilado com esbuild para um único bundle `dist/Code.j
 - **Debounce** (5s via CacheService): evita múltiplos POSTs quando integrações preenchem várias células da mesma linha
 - **Cursor inicial**: ao salvar config pela primeira vez, `lastProcessedRow` = última linha atual (não reenvia histórico)
 - **Validação local**: campos obrigatórios verificados antes do POST
-- **Reautorização**: padrão Google com `ScriptApp.getAuthorizationInfo()` + e-mail de alerta
+- **Reautorização**: padrão Google com `ScriptApp.getAuthorizationInfo()`; se necessária, o sync em background para até o usuário reautorizar via Extensões → Lead Control
 
 ## Funções globais expostas
 

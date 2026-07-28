@@ -5,16 +5,15 @@
   "oauthScopes": [
     "https://www.googleapis.com/auth/spreadsheets.currentonly",
     "https://www.googleapis.com/auth/script.scriptapp",
-    "https://www.googleapis.com/auth/script.external_request",
-    "https://www.googleapis.com/auth/script.send_mail"
+    "https://www.googleapis.com/auth/script.external_request"
   ],
   "addOns": {
     "common": {
       "name": "Lead Control - Novo Lead",
-      "logoUrl": "https://www.gstatic.com/images/branding/product/2x/sheets_2020q4_48dp.png",
+      "logoUrl": "https://www.leadcontrol.ia.br/assets/images/logo.png",
       "layoutProperties": {
-        "primaryColor": "#4285F4",
-        "secondaryColor": "#34A853"
+        "primaryColor": "#213E60",
+        "secondaryColor": "#49B2AC"
       }
     },
     "sheets": {

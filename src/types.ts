@@ -11,7 +11,6 @@ export const PROPERTY_KEYS = {
   SHEET_NAME: 'sheetName',
   ENABLED: 'enabled',
   LAST_PROCESSED_ROW: 'lastProcessedRow',
-  LAST_AUTH_EMAIL_DATE: 'lastAuthEmailDate',
   COLUMN_MAPPINGS: 'columnMappings',
 } as const;
 

@@ -78,14 +78,6 @@ export function setLastProcessedRow(row: number): void {
   getProps().setProperty(PROPERTY_KEYS.LAST_PROCESSED_ROW, String(row));
 }
 
-export function getLastAuthEmailDate(): string | null {
-  return getProps().getProperty(PROPERTY_KEYS.LAST_AUTH_EMAIL_DATE);
-}
-
-export function setLastAuthEmailDate(date: string): void {
-  getProps().setProperty(PROPERTY_KEYS.LAST_AUTH_EMAIL_DATE, date);
-}
-
 export function isConfigComplete(config: IntegrationConfig): boolean {
   return Boolean(
       config.apiEndpoint &&

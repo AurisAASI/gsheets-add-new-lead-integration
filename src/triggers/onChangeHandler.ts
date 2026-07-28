@@ -17,7 +17,7 @@ import {
   showSuccessToast,
   showWarningToast,
 } from '../ui/notifications';
-import {ensureAuthorizationOrNotify} from './triggerManager';
+import {ensureAuthorization} from './triggerManager';
 
 const RELEVANT_CHANGE_TYPES = new Set(['EDIT', 'INSERT_ROW']);
 const MAX_ERROR_MESSAGES_IN_LOG = 3;
@@ -236,8 +236,7 @@ export function onChangeHandler(e: GoogleAppsScript.Events.SheetsOnChange): void
         `aba=${config.sheetName}`,
     );
 
-    if (!ensureAuthorizationOrNotify()) {
-      logWarn('onChange', 'Reautorização necessária — execução interrompida');
+    if (!ensureAuthorization()) {
       return;
     }
 

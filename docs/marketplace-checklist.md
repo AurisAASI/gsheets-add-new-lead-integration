@@ -24,7 +24,6 @@ Use este checklist antes de submeter o add-on para revisão no Google Workspace 
   - `spreadsheets.currentonly`
   - `script.scriptapp`
   - `script.external_request`
-  - `script.send_mail`
 
 ## 3. Verificação de scopes
 

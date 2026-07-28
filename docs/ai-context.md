@@ -95,14 +95,13 @@ npm run deploy:prod
 |------------|-------|
 | Lead Control API | `POST {apiEndpoint}` with `x-api-key` header |
 | Google Sheets API | Read sheet data (via SpreadsheetApp service) |
-| Google Apps Script Services | SpreadsheetApp, PropertiesService, CacheService, UrlFetchApp, ScriptApp, CardService, MailApp |
+| Google Apps Script Services | SpreadsheetApp, PropertiesService, CacheService, UrlFetchApp, ScriptApp, CardService |
 
 ## OAuth scopes (appsscript.json)
 
 - `spreadsheets.currentonly` — read current spreadsheet
 - `script.scriptapp` — manage installable triggers
 - `script.external_request` — HTTP POST to Lead Control API
-- `script.send_mail` — re-authorization alert emails
 
 ## Gotchas
 
