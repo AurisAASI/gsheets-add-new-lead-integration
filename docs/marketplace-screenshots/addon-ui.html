@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lead Control Marketplace Screenshot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="frame">
+      <section class="sheet">
+        <div class="sheet-toolbar">
+          <div class="sheet-logo">S</div>
+          <div class="sheet-title">Leads — Base Dados</div>
+        </div>
+        <div class="sheet-tabs">
+          <div class="tab active">Base Dados</div>
+          <div class="tab">Resumo</div>
+        </div>
+        <div class="grid-wrap">
+          <table class="grid" id="sheetGrid">
+            <colgroup>
+              <col class="row-num" />
+              <col /><col /><col /><col /><col /><col />
+            </colgroup>
+            <thead>
+              <tr class="header">
+                <th class="row-num"></th>
+                <th>nome</th>
+                <th>telefone</th>
+                <th>cidade</th>
+                <th>fonte</th>
+                <th>email</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody id="sheetBody"></tbody>
+          </table>
+          <div class="toast" id="toast"><strong>Sucesso</strong><span id="toastText"></span></div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="brand">
+            <img
+              src="../../src/assets/images/logo-symbol-leadcontrol.png"
+              alt=""
+            />
+            <span>Add-ons</span>
+          </div>
+          <span style="color: #5f6368; font-size: 16px">✕</span>
+        </div>
+        <div class="sidebar-body scroll-hint" id="sidebarBody"></div>
+      </aside>
+    </div>
+
+    <script>
+      const rows = [
+        ["Ana Souza", "(11) 98888-1001", "São Paulo", "Meta Ads", "ana@exemplo.com", "Aguardando contato"],
+        ["Bruno Lima", "(21) 97777-2002", "Rio de Janeiro", "Google Ads", "bruno@exemplo.com", "Aguardando contato"],
+        ["Carla Nunes", "(19) 96666-3003", "Campinas", "Zapier", "carla@exemplo.com", "Aguardando contato"],
+      ];
+
+      const params = new URLSearchParams(location.search);
+      const scene = params.get("scene") || "inactive";
+
+      function renderRows(extra) {
+        const body = document.getElementById("sheetBody");
+        const data = extra ? [...rows, extra] : rows;
+        body.innerHTML = data
+          .map(
+            (r, i) => `
+          <tr class="${extra && i === data.length - 1 ? "highlight" : ""}">
+            <td class="row-num">${i + 1}</td>
+            ${r.map((c) => `<td>${c}</td>`).join("")}
+          </tr>`,
+          )
+          .join("");
+      }
+
+      function field(label, value) {
+        return `<div class="field"><label>${label}</label><input value="${value}" readonly /></div>`;
+      }
+
+      function select(label, value) {
+        return `<div class="field"><label>${label}</label><select disabled><option>${value}</option></select></div>`;
+      }
+
+      function buildSidebar(state) {
+        const active = state === "active" || state === "toast" || state === "newrow";
+        const filled = state !== "inactive";
+        const statusIcon = active ? "ok" : "warn";
+        const statusTop = active ? "Integração ativa" : "Integração inativa";
+        const statusText = active
+          ? "Novas linhas serão enviadas automaticamente para o Lead Control."
+          : "Configure e clique em Salvar e ativar para começar.";
+        const creds = filled
+          ? "Credenciais: preenchidas"
+          : "Credenciais: incompletas";
+        const last = active
+          ? "Última linha processada: 3"
+          : "Nenhuma linha processada ainda.";
+
+        const endpoint = filled
+          ? "https://api.exemplo.com/integrations/leads"
+          : "";
+        const apiKey = filled ? "••••••••••••••••" : "";
+        const companyId = filled ? "empresa-demo-123" : "";
+
+        const mapping = filled
+          ? `
+          ${select("Nome completo (obrigatório)", "nome")}
+          ${select("Telefone (obrigatório)", "telefone")}
+          ${select("Cidade (obrigatório)", "cidade")}
+          ${select("Fonte (obrigatório)", "fonte")}
+          ${select("E-mail (opcional)", "email")}
+          ${select("Status do lead (opcional)", "status")}
+          <button class="btn ghost">Atualizar colunas</button>
+        `
+          : `<p class="muted">Selecione qual coluna da planilha corresponde a cada informação do lead.</p>
+             ${select("Nome completo (obrigatório)", "— Selecione —")}
+             ${select("Telefone (obrigatório)", "— Selecione —")}
+             ${select("Cidade (obrigatório)", "— Selecione —")}
+             ${select("Fonte (obrigatório)", "— Selecione —")}
+             <button class="btn ghost">Atualizar colunas</button>`;
+
+        return `
+          <div class="card-header">
+            <h1>Lead Control - Adicionar novo lead</h1>
+            <p>Ponte entre planilha e Lead Control</p>
+          </div>
+          <div class="section intro">
+            <p>Este add-on monitora a aba configurada e envia cada nova linha como lead para o Lead Control, linha a linha, assim que ela é adicionada à planilha.</p>
+          </div>
+          <div class="section">
+            <h2>Status</h2>
+            <div class="decorated">
+              <div class="icon ${statusIcon}">★</div>
+              <div>
+                <div class="top">${statusTop}</div>
+                <div class="text">${statusText}</div>
+              </div>
+            </div>
+            <div class="decorated">
+              <div class="icon">👤</div>
+              <div class="text">${creds}<br>${last}</div>
+            </div>
+          </div>
+          <div class="section notice">
+            <div class="text muted">URL do endpoint, Chave de API, ID da Empresa e demais credenciais estão em Configurações → Integração no Lead Control.</div>
+            <div class="linkish">Abrir Lead Control</div>
+          </div>
+          <div class="section" id="configSection">
+            <h2>Configuração da integração</h2>
+            ${field("URL do endpoint", endpoint)}
+            ${field("Chave de API", apiKey)}
+            ${field("ID da empresa", companyId)}
+            ${field("Nome da aba", "Base Dados")}
+          </div>
+          <div class="section" id="mappingSection">
+            <h2>Mapeamento de colunas</h2>
+            ${mapping}
+          </div>
+          <div class="section" id="actionsSection">
+            <h2>Ações</h2>
+            <button class="btn primary">Salvar e ativar</button>
+            <button class="btn">Desativar integração</button>
+            <button class="btn">Testar envio (última linha)</button>
+            <button class="btn">Reprocessar última linha</button>
+          </div>
+        `;
+      }
+
+      const sidebarBody = document.getElementById("sidebarBody");
+      sidebarBody.innerHTML = buildSidebar(scene);
+      if (scene === "mapping") {
+        sidebarBody.classList.add("compact");
+        document.getElementById("mappingSection").scrollIntoView({block: "start"});
+      }
+
+      if (scene === "newrow") {
+        renderRows([
+          "Diego Alves",
+          "(31) 95555-4004",
+          "Belo Horizonte",
+          "Meta Ads",
+          "diego@exemplo.com",
+          "Aguardando contato",
+        ]);
+      } else {
+        renderRows();
+      }
+
+      if (scene === "toast" || scene === "newrow") {
+        const toast = document.getElementById("toast");
+        document.getElementById("toastText").textContent =
+          scene === "newrow"
+            ? "Lead enviado com sucesso (linha 4)."
+            : "Lead de teste enviado com sucesso (última linha).";
+        toast.classList.add("show");
+      }
+
+      document.documentElement.setAttribute("data-ready", "1");
+    </script>
+  </body>
+</html>

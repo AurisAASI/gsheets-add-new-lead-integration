@@ -105,6 +105,9 @@ export function getConfiguredSheet(
     spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
 ): GoogleAppsScript.Spreadsheet.Sheet | null {
   const ss = spreadsheet || SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    return null;
+  }
   const config = getConfig();
   return ss.getSheetByName(config.sheetName);
 }

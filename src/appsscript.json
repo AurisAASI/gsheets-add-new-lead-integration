@@ -8,14 +8,21 @@
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/script.send_mail"
   ],
+  "urlFetchWhitelist": [
+    "https://w23kw2bfok.execute-api.us-east-1.amazonaws.com/",
+    "https://*.execute-api.us-east-1.amazonaws.com/"
+  ],
   "addOns": {
     "common": {
-      "name": "Lead Control - Novo Lead",
-      "logoUrl": "https://www.gstatic.com/images/branding/product/2x/sheets_2020q4_48dp.png",
+      "name": "Lead Control - Adicionar novo lead",
+      "logoUrl": "https://raw.githubusercontent.com/AurisAASI/gsheets-add-new-lead-integration/main/src/assets/images/logo-symbol-leadcontrol.png",
       "layoutProperties": {
         "primaryColor": "#4285F4",
         "secondaryColor": "#34A853"
-      }
+      },
+      "openLinkUrlPrefixes": [
+        "https://app.leadcontrol.ia.br/"
+      ]
     },
     "sheets": {
       "homepageTrigger": {
