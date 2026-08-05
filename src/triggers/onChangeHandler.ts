@@ -29,26 +29,42 @@ interface RowProcessResult {
   errorMessage?: string;
 }
 
-function getDebounceKey(): string {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  return `lead-control:onChange:${ss.getId()}`;
+function getDebounceKey(): string | null {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      return null;
+    }
+    return `lead-control:onChange:${ss.getId()}`;
+  } catch {
+    return null;
+  }
+}
+
+function getDocumentCacheSafe(): GoogleAppsScript.Cache.Cache | null {
+  try {
+    return CacheService.getDocumentCache();
+  } catch {
+    return null;
+  }
 }
 
 function isDebounced(): boolean {
-  const cache = CacheService.getDocumentCache();
-  if (!cache) {
+  const cache = getDocumentCacheSafe();
+  const key = getDebounceKey();
+  if (!cache || !key) {
     return false;
   }
-  const key = getDebounceKey();
   return cache.get(key) !== null;
 }
 
 function setDebounce(): void {
-  const cache = CacheService.getDocumentCache();
-  if (!cache) {
+  const cache = getDocumentCacheSafe();
+  const key = getDebounceKey();
+  if (!cache || !key) {
     return;
   }
-  cache.put(getDebounceKey(), '1', DEBOUNCE_SECONDS);
+  cache.put(key, '1', DEBOUNCE_SECONDS);
 }
 
 function formatBatchSummary(

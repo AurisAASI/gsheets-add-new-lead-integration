@@ -339,7 +339,29 @@ export function buildHomepageCard(
 }
 
 export function onSheetsHomepage(): GoogleAppsScript.Card_Service.Card {
-  return buildHomepageCard();
+  try {
+    return buildHomepageCard();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logError('ui', 'Falha ao montar homepage', message);
+    return CardService.newCardBuilder()
+        .setHeader(
+            CardService.newCardHeader()
+                .setTitle('Lead Control')
+                .setSubtitle('Não foi possível abrir o painel'),
+        )
+        .addSection(
+            CardService.newCardSection().addWidget(
+                CardService.newTextParagraph().setText(
+                    'Ocorreu um erro ao carregar o add-on. ' +
+                    'Feche e abra novamente. Se o problema continuar, ' +
+                    'contate o suporte Lead Control.\n\n' +
+                    `Detalhe: ${message}`,
+                ),
+            ),
+        )
+        .build();
+  }
 }
 
 function parseColumnMappingsFromForm(

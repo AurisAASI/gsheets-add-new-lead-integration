@@ -9,8 +9,59 @@ import {
   REQUIRED_COLUMN_FIELDS,
 } from '../types';
 
-function getProps(): GoogleAppsScript.Properties.Properties {
-  return PropertiesService.getDocumentProperties();
+interface PropStore {
+  getProperty(key: string): string | null;
+  setProperty(key: string, value: string): GoogleAppsScript.Properties.Properties;
+  setProperties(
+      properties: {[key: string]: string},
+  ): GoogleAppsScript.Properties.Properties;
+}
+
+function getActiveSpreadsheetId(): string | null {
+  try {
+    return SpreadsheetApp.getActiveSpreadsheet()?.getId() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * DocumentProperties is preferred (per-spreadsheet, all editors).
+ * Some Workspace add-on / auth contexts throw on getDocumentProperties();
+ * fall back to UserProperties keyed by spreadsheet ID.
+ */
+function getPropStore(): PropStore {
+  try {
+    const docProps = PropertiesService.getDocumentProperties();
+    if (docProps) {
+      // Probe access — some contexts return an object that fails on first read.
+      docProps.getProperty('__probe__');
+      return docProps;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logWarn('config', `DocumentProperties indisponível — fallback UserProperties | ${message}`);
+  }
+
+  const userProps = PropertiesService.getUserProperties();
+  const ssId = getActiveSpreadsheetId() || 'unknown';
+  const prefix = `ss:${ssId}:`;
+
+  return {
+    getProperty(key: string): string | null {
+      return userProps.getProperty(prefix + key);
+    },
+    setProperty(key: string, value: string) {
+      return userProps.setProperty(prefix + key, value);
+    },
+    setProperties(properties: {[key: string]: string}) {
+      const prefixed: {[key: string]: string} = {};
+      Object.keys(properties).forEach((key) => {
+        prefixed[prefix + key] = properties[key];
+      });
+      return userProps.setProperties(prefixed);
+    },
+  };
 }
 
 function parseBoolean(value: string | null, fallback = false): boolean {
@@ -42,7 +93,7 @@ function parseColumnMappings(value: string | null): ColumnMappings {
 }
 
 export function getConfig(): IntegrationConfig {
-  const props = getProps();
+  const props = getPropStore();
   return {
     apiEndpoint: props.getProperty(PROPERTY_KEYS.API_ENDPOINT) || '',
     apiKey: props.getProperty(PROPERTY_KEYS.API_KEY) || '',
@@ -57,7 +108,7 @@ export function getConfig(): IntegrationConfig {
 export function saveConfig(
     partial: Partial<IntegrationConfig>,
 ): IntegrationConfig {
-  const props = getProps();
+  const props = getPropStore();
   const current = getConfig();
   const next: IntegrationConfig = {...current, ...partial};
 
@@ -75,7 +126,7 @@ export function saveConfig(
 }
 
 export function setLastProcessedRow(row: number): void {
-  getProps().setProperty(PROPERTY_KEYS.LAST_PROCESSED_ROW, String(row));
+  getPropStore().setProperty(PROPERTY_KEYS.LAST_PROCESSED_ROW, String(row));
 }
 
 export function isConfigComplete(config: IntegrationConfig): boolean {
@@ -97,6 +148,9 @@ export function getConfiguredSheet(
     spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
 ): GoogleAppsScript.Spreadsheet.Sheet | null {
   const ss = spreadsheet || SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    return null;
+  }
   const config = getConfig();
   return ss.getSheetByName(config.sheetName);
 }
