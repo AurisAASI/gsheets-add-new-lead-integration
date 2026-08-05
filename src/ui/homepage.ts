@@ -43,6 +43,25 @@ const COLUMN_FIELD_CONFIG: Array<{
   {key: 'statusLead', fieldName: 'mapStatusLead', required: false},
 ];
 
+function listSheetNames(): string[] {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    return [];
+  }
+  return ss.getSheets().map((sheet) => sheet.getName());
+}
+
+function resolveSheetNameForDisplay(preferred: string): string {
+  const names = listSheetNames();
+  if (preferred && names.includes(preferred)) {
+    return preferred;
+  }
+  if (names.includes(DEFAULT_SHEET_NAME)) {
+    return DEFAULT_SHEET_NAME;
+  }
+  return names[0] || DEFAULT_SHEET_NAME;
+}
+
 function buildIntroSection(): GoogleAppsScript.Card_Service.CardSection {
   return CardService.newCardSection()
       .addWidget(
@@ -121,6 +140,31 @@ function buildLeadControlNoticeSection(): GoogleAppsScript.Card_Service.CardSect
       );
 }
 
+function buildSheetNameDropdown(
+    selectedSheetName: string,
+): GoogleAppsScript.Card_Service.Widget {
+  const sheetNames = listSheetNames();
+  if (sheetNames.length === 0) {
+    return CardService.newTextParagraph().setText(
+        'Nenhuma aba encontrada nesta planilha.',
+    );
+  }
+
+  const selection = CardService.newSelectionInput()
+      .setType(CardService.SelectionInputType.DROPDOWN)
+      .setTitle('Aba para sincronizar')
+      .setFieldName('sheetName')
+      .setOnChangeAction(
+          CardService.newAction().setFunctionName('handleRefreshColumns'),
+      );
+
+  sheetNames.forEach((name) => {
+    selection.addItem(name, name, name === selectedSheetName);
+  });
+
+  return selection;
+}
+
 function buildConfigSection(
     config: IntegrationConfig,
 ): GoogleAppsScript.Card_Service.CardSection {
@@ -144,12 +188,7 @@ function buildConfigSection(
               .setTitle('ID da empresa')
               .setValue(config.companyId),
       )
-      .addWidget(
-          CardService.newTextInput()
-              .setFieldName('sheetName')
-              .setTitle('Nome da aba')
-              .setValue(config.sheetName || DEFAULT_SHEET_NAME),
-      );
+      .addWidget(buildSheetNameDropdown(config.sheetName));
 }
 
 function buildColumnDropdown(
@@ -198,11 +237,11 @@ function buildColumnMappingSection(
           ),
       );
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(config.sheetName);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet()?.getSheetByName(config.sheetName);
   if (!sheet) {
     section.addWidget(
         CardService.newTextParagraph().setText(
-            `Aba "${config.sheetName}" não encontrada. Verifique o nome da aba e clique em Atualizar colunas.`,
+            `Aba "${config.sheetName}" não encontrada. Selecione outra aba ou clique em Atualizar colunas.`,
         ),
     );
     return section;
@@ -272,7 +311,11 @@ function buildActionsSection(): GoogleAppsScript.Card_Service.CardSection {
 function resolveDisplayConfig(
     overrides?: Partial<IntegrationConfig>,
 ): IntegrationConfig {
-  return {...getConfig(), ...overrides};
+  const merged = {...getConfig(), ...overrides};
+  return {
+    ...merged,
+    sheetName: resolveSheetNameForDisplay(merged.sheetName || ''),
+  };
 }
 
 export function buildHomepageCard(
@@ -316,11 +359,12 @@ function getFormOverrides(
     e: GoogleAppsScript.Addons.EventObject,
 ): Partial<IntegrationConfig> {
   const formInputs = (e as {formInputs?: Record<string, string[]>}).formInputs || {};
+  const rawSheetName = String(formInputs.sheetName?.[0] || '').trim();
   return {
     apiEndpoint: String(formInputs.apiEndpoint?.[0] || '').trim(),
     apiKey: String(formInputs.apiKey?.[0] || '').trim(),
     companyId: String(formInputs.companyId?.[0] || '').trim(),
-    sheetName: String(formInputs.sheetName?.[0] || DEFAULT_SHEET_NAME).trim(),
+    sheetName: resolveSheetNameForDisplay(rawSheetName || getConfig().sheetName),
     columnMappings: parseColumnMappingsFromForm(formInputs),
   };
 }
@@ -329,16 +373,10 @@ export function handleRefreshColumns(
     e: GoogleAppsScript.Addons.EventObject,
 ): GoogleAppsScript.Card_Service.ActionResponse {
   const overrides = getFormOverrides(e);
-  const displayConfig = resolveDisplayConfig(overrides);
 
   return CardService.newActionResponseBuilder()
       .setNavigation(
-          CardService.newNavigation().updateCard(
-              buildHomepageCard({
-                ...overrides,
-                sheetName: overrides.sheetName || displayConfig.sheetName,
-              }),
-          ),
+          CardService.newNavigation().updateCard(buildHomepageCard(overrides)),
       )
       .build();
 }
@@ -350,7 +388,8 @@ export function handleSaveConfiguration(
   const apiEndpoint = String(formInputs.apiEndpoint?.[0] || '').trim();
   const apiKey = String(formInputs.apiKey?.[0] || '').trim();
   const companyId = String(formInputs.companyId?.[0] || '').trim();
-  const sheetName = String(formInputs.sheetName?.[0] || DEFAULT_SHEET_NAME).trim();
+  const rawSheetName = String(formInputs.sheetName?.[0] || '').trim();
+  const sheetName = resolveSheetNameForDisplay(rawSheetName || getConfig().sheetName);
   const columnMappings = parseColumnMappingsFromForm(formInputs);
 
   const draft: Partial<IntegrationConfig> = {
@@ -366,7 +405,9 @@ export function handleSaveConfiguration(
 
   if (!isConfigComplete(merged)) {
     logWarn('ui', 'Salvar configuração rejeitado | credenciais incompletas');
-    showErrorToast('Preencha URL do endpoint, Chave de API, ID da empresa e nome da aba.');
+    showErrorToast(
+        'Preencha URL do endpoint, Chave de API, ID da empresa e selecione a aba.',
+    );
     return CardService.newActionResponseBuilder()
         .setNotification(
             CardService.newNotification().setText('Configuração incompleta.'),

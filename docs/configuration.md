@@ -23,7 +23,7 @@ Preencha:
 | **URL do endpoint** | Lead Control → Configurações → Integração |
 | **Chave de API** | Lead Control → Configurações → Integração |
 | **ID da empresa** | Lead Control → Configurações → Integração |
-| **Nome da aba** | Nome da aba da planilha que recebe os leads (padrão: `Base Dados`) |
+| **Aba para sincronizar** | Dropdown com as abas da planilha. Padrão: `Base Dados` se existir; senão a primeira aba |
 
 ### Mapeamento de colunas
 
@@ -38,7 +38,7 @@ Na seção **Mapeamento de colunas**, selecione para cada informação do lead q
 | E-mail | Não | E-mail (pode ficar sem mapear) |
 | Status do lead | Não | Status inicial (padrão: `Aguardando contato` se não mapear) |
 
-Se você alterar os cabeçalhos da planilha ou o nome da aba, clique em **Atualizar colunas** para recarregar as opções.
+Se você alterar os cabeçalhos da planilha ou trocar a aba no dropdown, o mapeamento recarrega automaticamente ao mudar a aba; use **Atualizar colunas** se tiver editado só os cabeçalhos.
 
 Clique em **Salvar e ativar**.
 
@@ -78,7 +78,7 @@ A primeira linha da aba deve conter cabeçalhos (nomes das colunas). Os nomes po
 |---------|---------------|------|
 | Leads não são enviados | Integração desativada | Abra o add-on e clique em Salvar e ativar |
 | Erro de campos ausentes | Mapeamento incorreto ou dados vazios | Verifique mapeamento e conteúdo da linha |
-| Dropdowns vazios | Aba inexistente ou sem cabeçalhos | Confira nome da aba e linha 1; clique em Atualizar colunas |
+| Dropdowns vazios | Aba sem cabeçalhos na linha 1 | Confira a aba selecionada e a linha 1; clique em Atualizar colunas |
 | Erro 401/403 na API | Chave de API incorreta | Verifique credenciais no [Lead Control](https://app.leadcontrol.ia.br) |
 | Add-on pede reautorização / leads param após update | Atualização do add-on ou permissões alteradas | Abra Extensões → Lead Control e autorize novamente |
 

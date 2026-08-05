@@ -68,7 +68,7 @@ Preencha os `scriptId` nos arquivos `.clasp.*.json` com os IDs dos projetos cria
 
 ## Planilha de teste
 
-Crie uma planilha Google com a aba `Base Dados` (ou o nome configurado) e os cabeçalhos:
+Crie uma planilha Google com uma aba de dados (ex.: `Base Dados` ou a aba padrão `Sheet1`) e os cabeçalhos:
 
 | nome | telefone | cidade | email | fonte | status |
 |------|----------|--------|-------|-------|--------|

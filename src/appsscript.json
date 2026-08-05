@@ -7,6 +7,9 @@
     "https://www.googleapis.com/auth/script.scriptapp",
     "https://www.googleapis.com/auth/script.external_request"
   ],
+  "urlFetchWhitelist": [
+    "https://w23kw2bfok.execute-api.us-east-1.amazonaws.com/"
+  ],
   "addOns": {
     "common": {
       "name": "Lead Control - Novo Lead",
@@ -14,7 +17,11 @@
       "layoutProperties": {
         "primaryColor": "#213E60",
         "secondaryColor": "#49B2AC"
-      }
+      },
+      "openLinkUrlPrefixes": [
+        "https://app.leadcontrol.ia.br/",
+        "https://www.leadcontrol.ia.br/"
+      ]
     },
     "sheets": {
       "homepageTrigger": {

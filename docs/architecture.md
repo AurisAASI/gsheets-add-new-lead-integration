@@ -15,7 +15,7 @@ flowchart TD
     end
 
     subgraph sheets [Google Planilhas]
-        Sheet[Aba Base Dados]
+        Sheet[Aba configurada]
         AddOn[Add-on Lead Control]
         Props[DocumentProperties]
         Trigger[Installable onChange]
@@ -70,7 +70,7 @@ Cada planilha armazena sua própria configuração em `PropertiesService.getDocu
 | `apiEndpoint` | string | URL do endpoint POST |
 | `apiKey` | string | Chave `x-api-key` |
 | `companyId` | string | ID da empresa no Lead Control |
-| `sheetName` | string | Nome da aba monitorada (default: `Base Dados`) |
+| `sheetName` | string | Aba monitorada (escolhida no dropdown; default `Base Dados` se existir, senão a primeira aba) |
 | `enabled` | boolean | Integração ativa/inativa |
 | `lastProcessedRow` | number | Cursor da última linha processada |
 
