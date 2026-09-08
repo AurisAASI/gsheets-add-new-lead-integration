@@ -24,6 +24,8 @@ Google Workspace Add-on for Google Sheets that automatically sends new lead rows
 | `src/config/settings.ts` | Read/write DocumentProperties |
 | `src/mapping/leadMapper.ts` | Map PT column headers → API payload |
 | `src/api/leadClient.ts` | `UrlFetchApp.fetch` POST to Lead Control |
+| `src/logging/logger.ts` | Stackdriver / Executions logging |
+| `src/logging/requestLog.ts` | Auto-created history sheet for send results |
 | `src/triggers/triggerManager.ts` | Create/delete installable onChange trigger |
 | `src/triggers/onChangeHandler.ts` | Main handler: debounce, process new rows, toasts |
 | `src/ui/homepage.ts` | CardService config UI + action handlers |
@@ -43,15 +45,17 @@ Google Workspace Add-on for Google Sheets that automatically sends new lead rows
 7. **Required API fields:** `fullName`, `phone`, `city`, `companyID`, `source`
 8. **Column mapping** is case-insensitive: `nome`→`fullName`, `telefone`→`phone`, `cidade`→`city`, `email`→`email`, `fonte`→`source`, `status`→`statusLead`
 9. **Idempotent API responses** (`IDEMPOTENT_API_RULES` in `leadClient.ts`) are treated as success — cursor advances, no error toast, no reprocessing (e.g. HTTP 409 "already exists")
+10. **Never monitor `Lead Control - Histórico`** — reserved sheet; exclude from sheet picker; set CacheService write flag before history writes so `onChange` ignores echo
 
 ## Data flow
 
 ```
 External integration → Sheets API append row
   → onChange trigger fires
-  → onChangeHandler checks auth + enabled + debounce
-  → processNewRows: rows (lastProcessedRow+1)..getLastRow()
+  → onChangeHandler checks history-write flag + auth + enabled + debounce
+  → processNewRows (document lock): rows (lastProcessedRow+1)..getLastRow()
   → leadMapper.mapRowToLead → leadClient.sendLeadToApi
+  → appendRequestLog to Lead Control - Histórico
   → update lastProcessedRow (per row; stops on real errors)
   → toast feedback
 ```
@@ -95,20 +99,20 @@ npm run deploy:prod
 |------------|-------|
 | Lead Control API | `POST {apiEndpoint}` with `x-api-key` header |
 | Google Sheets API | Read sheet data (via SpreadsheetApp service) |
-| Google Apps Script Services | SpreadsheetApp, PropertiesService, CacheService, UrlFetchApp, ScriptApp, CardService, MailApp |
+| Google Apps Script Services | SpreadsheetApp, PropertiesService, CacheService, LockService, UrlFetchApp, ScriptApp, CardService |
 
 ## OAuth scopes (appsscript.json)
 
-- `spreadsheets.currentonly` — read current spreadsheet
+- `spreadsheets.currentonly` — read/write current spreadsheet (includes auto-created history tab)
 - `script.scriptapp` — manage installable triggers
 - `script.external_request` — HTTP POST to Lead Control API
-- `script.send_mail` — re-authorization alert emails
 
 ## Gotchas
 
 - `onChange` event does NOT include which row changed → must use `lastProcessedRow` cursor
 - `changeType` for API appends is usually `EDIT`, not `INSERT_ROW`
 - Integrations filling multiple cells may fire onChange multiple times → debounce with CacheService (5s TTL)
+- Writing to the history sheet also fires `onChange` → set history-write CacheService flag before append
 - CardService form inputs arrive as `e.formInputs.fieldName[0]` (array)
 - clasp 3.x does not transpile TypeScript — always run `npm run build` before push
 - clasp 3.x uses `open-script` instead of the removed `open` command (wrapped by `npm run open:dev`)

@@ -7,7 +7,7 @@ Durante o desenvolvimento (test deployment), o Google exibe:
 > **O Google não verificou este app**  
 > Continue apenas se você entender os riscos...
 
-Isso **não é um bug do código**. Acontece porque o app usa scopes sensíveis (planilhas, triggers, requisições externas, e-mail) e ainda **não passou pela verificação OAuth do Google**.
+Isso **não é um bug do código**. Acontece porque o app usa scopes sensíveis (planilhas, triggers, requisições externas) e ainda **não passou pela verificação OAuth do Google**.
 
 No ambiente DEV isso é **normal e esperado**.
 
@@ -55,7 +55,6 @@ Scopes usados por este add-on:
 | `spreadsheets.currentonly` | Ler dados da planilha aberta para mapear leads |
 | `script.scriptapp` | Criar trigger installable `onChange` |
 | `script.external_request` | POST para API Lead Control |
-| `script.send_mail` | E-mail de alerta quando reautorização é necessária |
 
 ### 4. Submeter para verificação OAuth
 

@@ -7,6 +7,10 @@ import {
 } from '../config/settings';
 import {logError, logInfo, logWarn} from '../logging/logger';
 import {
+  ensureHistorySheet,
+  getLatestRequestLog,
+} from '../logging/requestLog';
+import {
   FIELD_LABELS_PT,
   getSheetHeaders,
   UNMAPPED_OPTION,
@@ -14,6 +18,7 @@ import {
 import {
   ColumnMappings,
   DEFAULT_SHEET_NAME,
+  HISTORY_SHEET_NAME,
   IntegrationConfig,
   MappableLeadField,
 } from '../types';
@@ -87,6 +92,39 @@ function notificationResponse(
       .build();
 }
 
+function listSheetNames(): string[] {
+  const ss = getActiveSpreadsheetSafe();
+  if (!ss) {
+    return [];
+  }
+  return ss.getSheets()
+      .map((sheet) => sheet.getName())
+      .filter((name) => name !== HISTORY_SHEET_NAME);
+}
+
+function resolveSheetNameForDisplay(preferred: string): string {
+  const names = listSheetNames();
+  if (preferred === HISTORY_SHEET_NAME) {
+    preferred = '';
+  }
+  if (preferred && names.includes(preferred)) {
+    return preferred;
+  }
+  if (names.includes(DEFAULT_SHEET_NAME)) {
+    return DEFAULT_SHEET_NAME;
+  }
+  return names[0] || DEFAULT_SHEET_NAME;
+}
+
+function formatLatestSendStatus(): string {
+  const latest = getLatestRequestLog();
+  if (!latest) {
+    return 'Último envio: nenhum ainda.';
+  }
+  const httpPart = latest.statusCode !== '' ? ` (HTTP ${latest.statusCode})` : '';
+  return `Último envio: ${latest.result} às ${latest.timestamp}${httpPart}`;
+}
+
 function buildIntroSection(): GoogleAppsScript.Card_Service.CardSection {
   return CardService.newCardSection()
       .addWidget(
@@ -135,7 +173,9 @@ function buildStatusSection(
 
   section.addWidget(
       CardService.newDecoratedText()
-          .setText(`${credentialsText}\n${lastProcessedText}`)
+          .setText(
+              `${credentialsText}\n${lastProcessedText}\n${formatLatestSendStatus()}`,
+          )
           .setWrapText(true)
           .setStartIcon(
               CardService.newIconImage().setIcon(
@@ -165,6 +205,31 @@ function buildLeadControlNoticeSection(): GoogleAppsScript.Card_Service.CardSect
       );
 }
 
+function buildSheetNameDropdown(
+    selectedSheetName: string,
+): GoogleAppsScript.Card_Service.Widget {
+  const sheetNames = listSheetNames();
+  if (sheetNames.length === 0) {
+    return CardService.newTextParagraph().setText(
+        'Nenhuma aba encontrada nesta planilha.',
+    );
+  }
+
+  const selection = CardService.newSelectionInput()
+      .setType(CardService.SelectionInputType.DROPDOWN)
+      .setTitle('Aba para sincronizar')
+      .setFieldName('sheetName')
+      .setOnChangeAction(
+          CardService.newAction().setFunctionName('handleRefreshColumns'),
+      );
+
+  sheetNames.forEach((name) => {
+    selection.addItem(name, name, name === selectedSheetName);
+  });
+
+  return selection;
+}
+
 function buildConfigSection(
     config: IntegrationConfig,
 ): GoogleAppsScript.Card_Service.CardSection {
@@ -188,12 +253,7 @@ function buildConfigSection(
               .setTitle('ID da empresa')
               .setValue(config.companyId),
       )
-      .addWidget(
-          CardService.newTextInput()
-              .setFieldName('sheetName')
-              .setTitle('Nome da aba')
-              .setValue(config.sheetName || DEFAULT_SHEET_NAME),
-      );
+      .addWidget(buildSheetNameDropdown(config.sheetName));
 }
 
 function buildColumnDropdown(
@@ -260,7 +320,7 @@ function buildColumnMappingSection(
   if (!sheet) {
     section.addWidget(
         CardService.newTextParagraph().setText(
-            `Aba "${config.sheetName}" não encontrada. Verifique o nome da aba e clique em Atualizar colunas.`,
+            `Aba "${config.sheetName}" não encontrada. Selecione outra aba ou clique em Atualizar colunas.`,
         ),
     );
     return section;
@@ -324,13 +384,24 @@ function buildActionsSection(): GoogleAppsScript.Card_Service.CardSection {
               .setOnClickAction(
                   CardService.newAction().setFunctionName('handleReprocessLastRow'),
               ),
+      )
+      .addWidget(
+          CardService.newTextButton()
+              .setText('Abrir histórico')
+              .setOnClickAction(
+                  CardService.newAction().setFunctionName('handleOpenHistory'),
+              ),
       );
 }
 
 function resolveDisplayConfig(
     overrides?: Partial<IntegrationConfig>,
 ): IntegrationConfig {
-  return {...getConfig(), ...overrides};
+  const merged = {...getConfig(), ...overrides};
+  return {
+    ...merged,
+    sheetName: resolveSheetNameForDisplay(merged.sheetName || ''),
+  };
 }
 
 export function buildHomepageCard(
@@ -380,11 +451,12 @@ function getFormOverrides(
     e: GoogleAppsScript.Addons.EventObject,
 ): Partial<IntegrationConfig> {
   const formInputs = (e as {formInputs?: Record<string, string[]>}).formInputs || {};
+  const rawSheetName = String(formInputs.sheetName?.[0] || '').trim();
   return {
     apiEndpoint: String(formInputs.apiEndpoint?.[0] || '').trim(),
     apiKey: String(formInputs.apiKey?.[0] || '').trim(),
     companyId: String(formInputs.companyId?.[0] || '').trim(),
-    sheetName: String(formInputs.sheetName?.[0] || DEFAULT_SHEET_NAME).trim(),
+    sheetName: resolveSheetNameForDisplay(rawSheetName || getConfig().sheetName),
     columnMappings: parseColumnMappingsFromForm(formInputs),
   };
 }
@@ -421,7 +493,8 @@ export function handleSaveConfiguration(
     const apiEndpoint = String(formInputs.apiEndpoint?.[0] || '').trim();
     const apiKey = String(formInputs.apiKey?.[0] || '').trim();
     const companyId = String(formInputs.companyId?.[0] || '').trim();
-    const sheetName = String(formInputs.sheetName?.[0] || DEFAULT_SHEET_NAME).trim();
+    const rawSheetName = String(formInputs.sheetName?.[0] || '').trim();
+    const sheetName = resolveSheetNameForDisplay(rawSheetName || getConfig().sheetName);
     const columnMappings = parseColumnMappingsFromForm(formInputs);
 
     const draft: Partial<IntegrationConfig> = {
@@ -437,7 +510,9 @@ export function handleSaveConfiguration(
 
     if (!isConfigComplete(merged)) {
       logWarn('ui', 'Salvar configuração rejeitado | credenciais incompletas');
-      showErrorToast('Preencha URL do endpoint, Chave de API, ID da empresa e nome da aba.');
+      showErrorToast(
+          'Preencha URL do endpoint, Chave de API, ID da empresa e selecione a aba.',
+      );
       return notificationResponse('Configuração incompleta.');
     }
 
@@ -451,6 +526,15 @@ export function handleSaveConfiguration(
       return notificationResponse('Mapeamento de colunas incompleto.');
     }
 
+    if (sheetName === HISTORY_SHEET_NAME) {
+      logWarn('ui', 'Salvar configuração rejeitado | aba de histórico selecionada');
+      showErrorToast(
+          'A aba de histórico não pode ser usada como fonte de leads. ' +
+          'Selecione outra aba.',
+      );
+      return notificationResponse('Selecione uma aba diferente do histórico.');
+    }
+
     const previous = getConfig();
     saveConfig(draft);
 
@@ -459,6 +543,7 @@ export function handleSaveConfiguration(
       initializedRow = initializeLastProcessedRow();
     }
 
+    ensureHistorySheet();
     const triggerOk = setupChangeTrigger();
     if (!triggerOk) {
       saveConfig({enabled: false});
@@ -531,7 +616,7 @@ export function handleTestLastRow(): GoogleAppsScript.Card_Service.ActionRespons
       return notificationResponse('Configure a integração antes de testar.');
     }
 
-    const result = processLastRow();
+    const result = processLastRow(undefined, 'Teste');
     if (result.success) {
       if (result.outcome === 'duplicate') {
         logInfo('ui', `Teste de envio concluído (duplicado) | ${result.message}`);
@@ -545,7 +630,14 @@ export function handleTestLastRow(): GoogleAppsScript.Card_Service.ActionRespons
       showErrorToast(result.message);
     }
 
-    return notificationResponse(result.message);
+    return CardService.newActionResponseBuilder()
+        .setNotification(
+            CardService.newNotification().setText(result.message),
+        )
+        .setNavigation(
+            CardService.newNavigation().updateCard(buildHomepageCard()),
+        )
+        .build();
   } catch (error) {
     const message = errorMessage(error);
     logError('ui', `Falha no teste de envio | ${message}`);
@@ -577,7 +669,7 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
     }
 
     saveConfig({lastProcessedRow: lastRow - 1});
-    const result = processLastRow();
+    const result = processLastRow(undefined, 'Reprocessar');
 
     if (result.success) {
       saveConfig({lastProcessedRow: lastRow});
@@ -606,5 +698,43 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
     logError('ui', `Falha no reprocessamento | ${message}`);
     showErrorToast('Não foi possível reprocessar a última linha.');
     return notificationResponse('Não foi possível reprocessar a última linha.');
+  }
+}
+
+export function handleOpenHistory(): GoogleAppsScript.Card_Service.ActionResponse {
+  try {
+    const sheet = ensureHistorySheet();
+    if (!sheet) {
+      logError('ui', 'Não foi possível abrir/criar a aba de histórico');
+      showErrorToast('Não foi possível abrir a aba de histórico.');
+      return notificationResponse('Não foi possível abrir a aba de histórico.');
+    }
+
+    const spreadsheet = getActiveSpreadsheetSafe();
+    if (!spreadsheet) {
+      return notificationResponse(
+          'Abra o add-on a partir de uma planilha para ver o histórico.',
+      );
+    }
+
+    spreadsheet.setActiveSheet(sheet);
+    logInfo('ui', 'Aba de histórico aberta');
+    showInfoToast('Aba Lead Control - Histórico aberta.');
+
+    return CardService.newActionResponseBuilder()
+        .setNotification(
+            CardService.newNotification().setText(
+                'Aba Lead Control - Histórico aberta.',
+            ),
+        )
+        .setNavigation(
+            CardService.newNavigation().updateCard(buildHomepageCard()),
+        )
+        .build();
+  } catch (error) {
+    const message = errorMessage(error);
+    logError('ui', `Falha ao abrir histórico | ${message}`);
+    showErrorToast('Não foi possível abrir a aba de histórico.');
+    return notificationResponse('Não foi possível abrir a aba de histórico.');
   }
 }
