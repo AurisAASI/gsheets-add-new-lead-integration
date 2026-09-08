@@ -409,6 +409,11 @@ export function buildHomepageCard(
 ): GoogleAppsScript.Card_Service.Card {
   const config = resolveDisplayConfig(overrides);
 
+  // Provision history sheet for already-configured spreadsheets after add-on update.
+  if (config.enabled && isConfigComplete(config)) {
+    ensureHistorySheet();
+  }
+
   return CardService.newCardBuilder()
       .setHeader(
           CardService.newCardHeader()

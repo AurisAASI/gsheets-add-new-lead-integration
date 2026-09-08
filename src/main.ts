@@ -1,5 +1,6 @@
 import {getConfig, isConfigComplete} from './config/settings';
 import {logError, logInfo} from './logging/logger';
+import {ensureHistorySheet} from './logging/requestLog';
 import {
   handleDisableIntegration,
   handleOpenHistory,
@@ -18,6 +19,7 @@ function onInstall(_e: GoogleAppsScript.Events.SheetsOnOpen): void {
   try {
     const config = getConfig();
     if (config.enabled && isConfigComplete(config)) {
+      ensureHistorySheet();
       const ok = setupChangeTrigger();
       logInfo(
           'install',

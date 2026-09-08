@@ -60,6 +60,8 @@ A primeira linha da aba de leads deve conter cabeçalhos (nomes das colunas). Os
 
 O add-on cria e mantém a aba **Lead Control - Histórico**. Não é necessário criá-la manualmente; se for apagada, ela é recriada no próximo envio ou ao clicar em **Abrir histórico**.
 
+Em planilhas que já estavam ativas antes desta funcionalidade, a aba é criada automaticamente ao **abrir o painel** do add-on após a atualização (ou no próximo envio), sem precisar clicar em Salvar e ativar de novo.
+
 Essa aba **não** aparece no dropdown de “Aba para sincronizar” e **não** deve ser usada como fonte de leads.
 
 Cada tentativa de envio gera uma linha com:
