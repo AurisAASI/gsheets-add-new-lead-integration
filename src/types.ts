@@ -4,6 +4,36 @@ export const DEFAULT_STATUS = 'Aguardando contato';
 export const HEADER_ROW = 1;
 export const DEBOUNCE_SECONDS = 5;
 
+/** Reserved sheet for per-request send history (auto-created by the add-on). */
+export const HISTORY_SHEET_NAME = 'Lead Control - Histórico';
+export const HISTORY_MAX_ROWS = 1000;
+export const HISTORY_WRITE_FLAG_TTL_SECONDS = 30;
+
+export const HISTORY_HEADERS = [
+  'Data/hora',
+  'Origem',
+  'Linha',
+  'Nome',
+  'Resultado',
+  'HTTP',
+  'Mensagem',
+  'Endpoint',
+] as const;
+
+export type RequestLogOrigin = 'Automático' | 'Teste' | 'Reprocessar';
+export type RequestLogResult = 'Sucesso' | 'Duplicado' | 'Erro' | 'Ignorado';
+
+export interface RequestLogEntry {
+  timestamp: string;
+  origin: RequestLogOrigin;
+  row: number | '';
+  name: string;
+  result: RequestLogResult;
+  statusCode: number | '';
+  message: string;
+  endpoint: string;
+}
+
 export const PROPERTY_KEYS = {
   API_ENDPOINT: 'apiEndpoint',
   API_KEY: 'apiKey',

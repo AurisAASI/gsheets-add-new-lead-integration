@@ -7,6 +7,10 @@ import {
 } from '../config/settings';
 import {logError, logInfo, logWarn} from '../logging/logger';
 import {
+  ensureHistorySheet,
+  getLatestRequestLog,
+} from '../logging/requestLog';
+import {
   FIELD_LABELS_PT,
   getSheetHeaders,
   UNMAPPED_OPTION,
@@ -14,6 +18,7 @@ import {
 import {
   ColumnMappings,
   DEFAULT_SHEET_NAME,
+  HISTORY_SHEET_NAME,
   IntegrationConfig,
   MappableLeadField,
 } from '../types';
@@ -48,11 +53,16 @@ function listSheetNames(): string[] {
   if (!ss) {
     return [];
   }
-  return ss.getSheets().map((sheet) => sheet.getName());
+  return ss.getSheets()
+      .map((sheet) => sheet.getName())
+      .filter((name) => name !== HISTORY_SHEET_NAME);
 }
 
 function resolveSheetNameForDisplay(preferred: string): string {
   const names = listSheetNames();
+  if (preferred === HISTORY_SHEET_NAME) {
+    preferred = '';
+  }
   if (preferred && names.includes(preferred)) {
     return preferred;
   }
@@ -60,6 +70,15 @@ function resolveSheetNameForDisplay(preferred: string): string {
     return DEFAULT_SHEET_NAME;
   }
   return names[0] || DEFAULT_SHEET_NAME;
+}
+
+function formatLatestSendStatus(): string {
+  const latest = getLatestRequestLog();
+  if (!latest) {
+    return 'Último envio: nenhum ainda.';
+  }
+  const httpPart = latest.statusCode !== '' ? ` (HTTP ${latest.statusCode})` : '';
+  return `Último envio: ${latest.result} às ${latest.timestamp}${httpPart}`;
 }
 
 function buildIntroSection(): GoogleAppsScript.Card_Service.CardSection {
@@ -110,7 +129,9 @@ function buildStatusSection(
 
   section.addWidget(
       CardService.newDecoratedText()
-          .setText(`${credentialsText}\n${lastProcessedText}`)
+          .setText(
+              `${credentialsText}\n${lastProcessedText}\n${formatLatestSendStatus()}`,
+          )
           .setWrapText(true)
           .setStartIcon(
               CardService.newIconImage().setIcon(
@@ -305,6 +326,13 @@ function buildActionsSection(): GoogleAppsScript.Card_Service.CardSection {
               .setOnClickAction(
                   CardService.newAction().setFunctionName('handleReprocessLastRow'),
               ),
+      )
+      .addWidget(
+          CardService.newTextButton()
+              .setText('Abrir histórico')
+              .setOnClickAction(
+                  CardService.newAction().setFunctionName('handleOpenHistory'),
+              ),
       );
 }
 
@@ -451,6 +479,21 @@ export function handleSaveConfiguration(
         .build();
   }
 
+  if (sheetName === HISTORY_SHEET_NAME) {
+    logWarn('ui', 'Salvar configuração rejeitado | aba de histórico selecionada');
+    showErrorToast(
+        'A aba de histórico não pode ser usada como fonte de leads. ' +
+        'Selecione outra aba.',
+    );
+    return CardService.newActionResponseBuilder()
+        .setNotification(
+            CardService.newNotification().setText(
+                'Selecione uma aba diferente do histórico.',
+            ),
+        )
+        .build();
+  }
+
   const previous = getConfig();
   saveConfig(draft);
 
@@ -459,6 +502,7 @@ export function handleSaveConfiguration(
     initializedRow = initializeLastProcessedRow();
   }
 
+  ensureHistorySheet();
   setupChangeTrigger();
   logInfo(
       'ui',
@@ -503,7 +547,7 @@ export function handleTestLastRow(): GoogleAppsScript.Card_Service.ActionRespons
         .build();
   }
 
-  const result = processLastRow();
+  const result = processLastRow(undefined, 'Teste');
   if (result.success) {
     if (result.outcome === 'duplicate') {
       logInfo('ui', `Teste de envio concluído (duplicado) | ${result.message}`);
@@ -520,6 +564,9 @@ export function handleTestLastRow(): GoogleAppsScript.Card_Service.ActionRespons
   return CardService.newActionResponseBuilder()
       .setNotification(
           CardService.newNotification().setText(result.message),
+      )
+      .setNavigation(
+          CardService.newNavigation().updateCard(buildHomepageCard()),
       )
       .build();
 }
@@ -553,7 +600,7 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
   }
 
   saveConfig({lastProcessedRow: lastRow - 1});
-  const result = processLastRow();
+  const result = processLastRow(undefined, 'Reprocessar');
 
   if (result.success) {
     saveConfig({lastProcessedRow: lastRow});
@@ -572,6 +619,36 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
   return CardService.newActionResponseBuilder()
       .setNotification(
           CardService.newNotification().setText(result.message),
+      )
+      .setNavigation(
+          CardService.newNavigation().updateCard(buildHomepageCard()),
+      )
+      .build();
+}
+
+export function handleOpenHistory(): GoogleAppsScript.Card_Service.ActionResponse {
+  const sheet = ensureHistorySheet();
+  if (!sheet) {
+    logError('ui', 'Não foi possível abrir/criar a aba de histórico');
+    showErrorToast('Não foi possível abrir a aba de histórico.');
+    return CardService.newActionResponseBuilder()
+        .setNotification(
+            CardService.newNotification().setText(
+                'Não foi possível abrir a aba de histórico.',
+            ),
+        )
+        .build();
+  }
+
+  SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(sheet);
+  logInfo('ui', 'Aba de histórico aberta');
+  showInfoToast('Aba Lead Control - Histórico aberta.');
+
+  return CardService.newActionResponseBuilder()
+      .setNotification(
+          CardService.newNotification().setText(
+              'Aba Lead Control - Histórico aberta.',
+          ),
       )
       .setNavigation(
           CardService.newNavigation().updateCard(buildHomepageCard()),

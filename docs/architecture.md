@@ -16,6 +16,7 @@ flowchart TD
 
     subgraph sheets [Google Planilhas]
         Sheet[Aba configurada]
+        History[Aba Lead Control Histórico]
         AddOn[Add-on Lead Control]
         Props[DocumentProperties]
         Trigger[Installable onChange]
@@ -32,6 +33,7 @@ flowchart TD
     Trigger --> AddOn
     AddOn --> Props
     AddOn --> API
+    AddOn --> History
 ```
 
 ## Por que onChange e não onEdit?
@@ -52,7 +54,9 @@ src/
 ├── config/settings.ts      # Leitura/gravação de DocumentProperties
 ├── mapping/leadMapper.ts   # Mapeamento colunas PT → payload API
 ├── api/leadClient.ts       # UrlFetchApp POST para Lead Control
-├── logging/logger.ts       # Logging padronizado para Stackdriver / Execuções
+├── logging/
+│   ├── logger.ts           # Logging padronizado para Stackdriver / Execuções
+│   └── requestLog.ts       # Aba de histórico de envios (criação automática)
 ├── triggers/
 │   ├── triggerManager.ts   # Criação/remoção de triggers installable
 │   └── onChangeHandler.ts  # Handler principal + processamento de linhas
@@ -74,6 +78,10 @@ Cada planilha armazena sua própria configuração em `PropertiesService.getDocu
 | `enabled` | boolean | Integração ativa/inativa |
 | `lastProcessedRow` | number | Cursor da última linha processada |
 
+## Histórico de envios
+
+A aba reservada `Lead Control - Histórico` é criada automaticamente ao salvar/ativar (e recriada se apagada). Cada POST (ou linha ignorada) gera uma linha com data, origem, resultado HTTP e mensagem. Não grava API key nem payload completo. Limite: últimas 1000 linhas.
+
 ## Build e deploy
 
 TypeScript em `src/` é compilado com esbuild para um único bundle `dist/Code.js`. O manifest `src/appsscript.json` é copiado para `dist/`. O clasp envia apenas o conteúdo de `dist/` para o projeto Apps Script.
@@ -83,6 +91,9 @@ TypeScript em `src/` é compilado com esbuild para um único bundle `dist/Code.j
 - **Debounce** (5s via CacheService): evita múltiplos POSTs quando integrações preenchem várias células da mesma linha
 - **Cursor inicial**: ao salvar config pela primeira vez, `lastProcessedRow` = última linha atual (não reenvia histórico)
 - **Validação local**: campos obrigatórios verificados antes do POST
+- **Flag anti-eco**: gravação na aba de histórico marca CacheService para o `onChange` ignorar o próprio write
+- **LockService**: serializa processamento para evitar POST duplicado
+- **Aba de histórico reservada**: excluída do dropdown e não pode ser monitorada
 - **Reautorização**: padrão Google com `ScriptApp.getAuthorizationInfo()`; se necessária, o sync em background para até o usuário reautorizar via Extensões → Lead Control
 
 ## Funções globais expostas
@@ -96,3 +107,4 @@ TypeScript em `src/` é compilado com esbuild para um único bundle `dist/Code.j
 | `handleDisableIntegration` | Botão "Desativar integração" |
 | `handleTestLastRow` | Botão "Testar envio" |
 | `handleReprocessLastRow` | Botão "Reprocessar última linha" |
+| `handleOpenHistory` | Botão "Abrir histórico" |

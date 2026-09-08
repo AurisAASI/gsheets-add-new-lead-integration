@@ -20,6 +20,7 @@ const requiredFunctions = [
   'handleRefreshColumns',
   'handleTestLastRow',
   'handleReprocessLastRow',
+  'handleOpenHistory',
 ].filter(Boolean);
 
 const missing = requiredFunctions.filter(

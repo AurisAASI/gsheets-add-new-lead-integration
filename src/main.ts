@@ -2,6 +2,7 @@ import {getConfig, isConfigComplete} from './config/settings';
 import {logInfo} from './logging/logger';
 import {
   handleDisableIntegration,
+  handleOpenHistory,
   handleRefreshColumns,
   handleReprocessLastRow,
   handleSaveConfiguration,
@@ -36,6 +37,7 @@ const exportedFunctions = {
   handleRefreshColumns,
   handleTestLastRow,
   handleReprocessLastRow,
+  handleOpenHistory,
 };
 
 Object.entries(exportedFunctions).forEach(([name, fn]) => {
