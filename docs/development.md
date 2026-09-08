@@ -78,7 +78,7 @@ Crie uma planilha Google com uma aba de dados (ex.: `Base Dados` ou a aba padrã
 1. Abra o projeto DEV: `npm run open:dev`
 2. Em **Implantar** → **Testar implantações**, crie uma implantação de teste
 3. Instale o add-on na planilha de teste via link de test deployment
-4. Abra o painel do add-on (Extensões → Lead Control)
+4. Abra o painel do add-on (Extensões → Lead Control - Adicionar novo lead)
 5. Preencha API Endpoint, API Key e Company ID
 6. Clique em **Salvar e ativar**
 

@@ -15,7 +15,7 @@ Use este checklist antes de submeter o add-on para revisão no Google Workspace 
 
 - [ ] Configurar em [Google Cloud Console → APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
 - [ ] Tipo de usuário: **Internal** (apenas domínio) ou **External** (público)
-- [ ] Nome do app: `Lead Control - Novo Lead`
+- [ ] Nome do app: `Lead Control - Adicionar novo lead`
 - [ ] E-mail de suporte do desenvolvedor
 - [ ] Logo do app (120×120 px)
 - [ ] **URL da política de privacidade** (obrigatório)
@@ -35,16 +35,35 @@ Use este checklist antes de submeter o add-on para revisão no Google Workspace 
 
 - [ ] Acessar [Google Cloud Console → Marketplace SDK](https://console.cloud.google.com/marketplace)
 - [ ] Preencher informações do listing:
-  - [ ] Nome: `Lead Control - Novo Lead`
+  - [ ] Nome: `Lead Control - Adicionar novo lead` (EN: `Lead Control - Add new lead`)
   - [ ] Descrição curta (até 200 caracteres)
   - [ ] Descrição detalhada
   - [ ] Categoria: Productivity ou Business Tools
   - [ ] Ícone (128×128 e 32×32 px)
-  - [ ] Screenshots (mínimo 1, recomendado 3-5)
+  - [ ] Screenshots (mínimo 1, recomendado 3-5) — ver requisitos abaixo
   - [ ] URL de suporte
   - [ ] URL de documentação (pode apontar para `docs/configuration.md` hospedado)
 - [ ] Tipo de instalação: **Individual** + **Domain install**
 - [ ] Definir visibilidade: público ou restrito por domínio
+
+### Screenshots — requisitos do Marketplace (rejeição comum)
+
+Use capturas **reais** do add-on no Google Sheets™ (sidebar CardService + planilha), não artes de marketing.
+
+- [ ] Tamanho: **1280×800** (ou 640×400 / 2560×1600)
+- [ ] Texto legível (sem blur, glow ou UI em perspectiva 3D)
+- [ ] Sem fundo de escritório, partículas, ícones flutuantes (+22.8%, etc.)
+- [ ] Sem janela do Chrome/SO; foque na planilha + painel do add-on
+- [ ] Mostrar o **add-on**, não só o CRM web (login/configurações do Lead Control)
+- [ ] Sequência sugerida:
+  1. Painel aberto (status inativo) + aba com cabeçalhos
+  2. Credenciais preenchidas + mapeamento de colunas
+  3. Após **Salvar e ativar** (integração ativa)
+  4. Toast/resultado de **Testar envio**
+  5. (Opcional) Linha nova na planilha após envio automático
+- [ ] Idioma da UI nas imagens alinhado ao listing (PT-BR e/ou EN)
+- [ ] Nome visível nas capturas = nome do listing/manifesto
+  (`Lead Control - Adicionar novo lead` / EN: `Lead Control - Add new lead`)
 
 ## 5. Manifest do add-on
 
@@ -79,6 +98,8 @@ Use este checklist antes de submeter o add-on para revisão no Google Workspace 
 - [ ] `npm run deploy:prod` executado com sucesso
 - [ ] Versão deployada testada em planilha real
 - [ ] Submeter listing para revisão do Google
+
+> Após uma rejeição, use também [marketplace-resubmission.md](./marketplace-resubmission.md).
 
 ## 9. Pós-publicação
 

@@ -6,7 +6,7 @@ Este guia é destinado ao usuário final que instala o add-on Lead Control na pl
 
 1. Instale o add-on pelo [Google Workspace Marketplace](https://workspace.google.com/marketplace) (ou via link de test deployment fornecido pela equipe Lead Control)
 2. Abra a planilha onde os leads serão recebidos
-3. Vá em **Extensões** → **Lead Control - Novo Lead**
+3. Vá em **Extensões** → **Lead Control - Adicionar novo lead**
 
 ## O que o add-on faz
 

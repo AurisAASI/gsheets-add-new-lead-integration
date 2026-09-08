@@ -1,5 +1,5 @@
 import {getConfig, isConfigComplete} from './config/settings';
-import {logInfo} from './logging/logger';
+import {logError, logInfo} from './logging/logger';
 import {
   handleDisableIntegration,
   handleOpenHistory,
@@ -15,17 +15,27 @@ import {setupChangeTrigger} from './triggers/triggerManager';
 declare const globalThis: Record<string, unknown>;
 
 function onInstall(_e: GoogleAppsScript.Events.SheetsOnOpen): void {
-  const config = getConfig();
-  if (config.enabled && isConfigComplete(config)) {
-    setupChangeTrigger();
-    logInfo('install', 'onInstall concluído | trigger onChange configurado');
-    return;
-  }
+  try {
+    const config = getConfig();
+    if (config.enabled && isConfigComplete(config)) {
+      const ok = setupChangeTrigger();
+      logInfo(
+          'install',
+          ok ?
+            'onInstall concluído | trigger onChange configurado' :
+            'onInstall concluído | falha ao configurar trigger onChange',
+      );
+      return;
+    }
 
-  const reason = !config.enabled ?
-    'integração desativada' :
-    'configuração incompleta';
-  logInfo('install', `onInstall concluído | trigger ignorado (${reason})`);
+    const reason = !config.enabled ?
+      'integração desativada' :
+      'configuração incompleta';
+    logInfo('install', `onInstall concluído | trigger ignorado (${reason})`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logError('install', `onInstall com erro não bloqueante | ${message}`);
+  }
 }
 
 const exportedFunctions = {

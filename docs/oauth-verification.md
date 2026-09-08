@@ -39,7 +39,7 @@ No projeto Apps Script **PROD**:
 [Console → APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
 
 - **User type:** External (público) ou Internal (apenas sua organização)
-- **App name:** Lead Control - Novo Lead
+- **App name:** Lead Control - Adicionar novo lead
 - **User support email:** seu e-mail de suporte
 - **Developer contact:** e-mail do desenvolvedor
 - **Logo:** 120×120 px
