@@ -46,6 +46,7 @@ Google Workspace Add-on for Google Sheets that automatically sends new lead rows
 8. **Column mapping** is case-insensitive: `nome`→`fullName`, `telefone`→`phone`, `cidade`→`city`, `email`→`email`, `fonte`→`source`, `status`→`statusLead`
 9. **Idempotent API responses** (`IDEMPOTENT_API_RULES` in `leadClient.ts`) are treated as success — cursor advances, no error toast, no reprocessing (e.g. HTTP 409 "already exists")
 10. **Never monitor `Lead Control - Histórico`** — reserved sheet; exclude from sheet picker; set CacheService write flag before history writes so `onChange` ignores echo
+11. **History sheet auto-provision** — when `enabled` and config is complete, `buildHomepageCard` and `onInstall` call `ensureHistorySheet()` so already-configured spreadsheets get the tab after an add-on update without re-saving
 
 ## Data flow
 
