@@ -1,5 +1,9 @@
 import {logError, logInfo, sanitizeEndpoint, truncateText} from '../logging/logger';
-import {IntegrationConfig, LeadPayload} from '../types';
+import {
+  classifyHttpResult,
+  extractApiErrorMessage,
+} from '../sync/httpClassify';
+import {FETCH_BATCH_SIZE, IntegrationConfig, LeadPayload} from '../types';
 
 export type SendLeadOutcome = 'created' | 'duplicate' | 'error';
 
@@ -8,48 +12,71 @@ export interface SendLeadResult {
   outcome: SendLeadOutcome;
   statusCode: number;
   message: string;
+  closesRow: boolean;
+  stopBatch: boolean;
 }
 
 export interface SendLeadContext {
   row?: number;
 }
 
-interface IdempotentApiRule {
-  statusCode: number;
-  messagePattern?: RegExp;
-}
-
-const IDEMPOTENT_API_RULES: IdempotentApiRule[] = [
-  {
-    statusCode: 409,
-    messagePattern: /already exists/i,
-  },
-];
-
 function formatRowContext(row?: number): string {
   return row !== undefined ? `linha=${row}` : 'linha=manual';
 }
 
-function extractResponseMessage(responseBody: string): string {
-  try {
-    const parsed = JSON.parse(responseBody) as {message?: string};
-    return parsed.message || responseBody;
-  } catch {
-    return responseBody;
-  }
+function buildFetchOptions(
+    lead: LeadPayload,
+    config: IntegrationConfig,
+): GoogleAppsScript.URL_Fetch.URLFetchRequestOptions {
+  return {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'x-api-key': config.apiKey,
+    },
+    payload: JSON.stringify(lead),
+    muteHttpExceptions: true,
+  };
 }
 
-function isIdempotentApiResponse(statusCode: number, responseBody: string): boolean {
-  const message = extractResponseMessage(responseBody);
-  return IDEMPOTENT_API_RULES.some((rule) => {
-    if (rule.statusCode !== statusCode) {
-      return false;
-    }
-    if (rule.messagePattern && !rule.messagePattern.test(message)) {
-      return false;
-    }
-    return true;
-  });
+function resultFromHttp(
+    statusCode: number,
+    responseBody: string,
+    lead: LeadPayload,
+): SendLeadResult {
+  const classified = classifyHttpResult(statusCode, responseBody);
+
+  if (classified.class === 'success') {
+    return {
+      success: true,
+      outcome: 'created',
+      statusCode,
+      message: `Lead ${lead.fullName} enviado com sucesso.`,
+      closesRow: true,
+      stopBatch: false,
+    };
+  }
+
+  if (classified.class === 'duplicate') {
+    return {
+      success: true,
+      outcome: 'duplicate',
+      statusCode,
+      message: 'Lead já cadastrado para esta empresa (telefone duplicado).',
+      closesRow: true,
+      stopBatch: false,
+    };
+  }
+
+  const detail = truncateText(extractApiErrorMessage(responseBody) || responseBody);
+  return {
+    success: false,
+    outcome: 'error',
+    statusCode,
+    message: `Erro ${statusCode}: ${detail}`,
+    closesRow: classified.closesRow,
+    stopBatch: classified.stopBatch,
+  };
 }
 
 export function sendLeadToApi(
@@ -65,57 +92,114 @@ export function sendLeadToApi(
       `Enviando lead | ${rowLabel} | nome=${lead.fullName} | endpoint=${endpointHost}`,
   );
 
-  const options: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
-    method: 'post',
-    contentType: 'application/json',
-    headers: {
-      'x-api-key': config.apiKey,
-    },
-    payload: JSON.stringify(lead),
-    muteHttpExceptions: true,
-  };
-
   try {
-    const response = UrlFetchApp.fetch(config.apiEndpoint, options);
+    const response = UrlFetchApp.fetch(
+        config.apiEndpoint,
+        buildFetchOptions(lead, config),
+    );
     const statusCode = response.getResponseCode();
     const responseBody = response.getContentText();
+    const result = resultFromHttp(statusCode, responseBody, lead);
 
-    if (statusCode === 201 || statusCode === 200) {
-      logInfo('api', `Lead enviado | ${rowLabel} | status=${statusCode}`);
-      return {
-        success: true,
-        outcome: 'created',
-        statusCode,
-        message: `Lead ${lead.fullName} enviado com sucesso.`,
-      };
+    if (result.success) {
+      logInfo(
+          'api',
+          `Lead ${result.outcome === 'duplicate' ? 'já existente' : 'enviado'} | ` +
+          `${rowLabel} | status=${statusCode}`,
+      );
+    } else {
+      logError('api', `Falha HTTP | ${rowLabel} | status=${statusCode}`, responseBody);
     }
-
-    if (isIdempotentApiResponse(statusCode, responseBody)) {
-      logInfo('api', `Lead já existente | ${rowLabel} | status=${statusCode}`);
-      return {
-        success: true,
-        outcome: 'duplicate',
-        statusCode,
-        message: 'Lead já cadastrado para esta empresa (telefone duplicado).',
-      };
-    }
-
-    const errorMessage = `Erro ${statusCode}: ${truncateText(responseBody)}`;
-    logError('api', `Falha HTTP | ${rowLabel} | status=${statusCode}`, responseBody);
-    return {
-      success: false,
-      outcome: 'error',
-      statusCode,
-      message: errorMessage,
-    };
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logError('api', `Falha na requisição | ${rowLabel}`, message);
+    const classified = classifyHttpResult(0);
     return {
       success: false,
       outcome: 'error',
       statusCode: 0,
       message: `Falha na requisição: ${message}`,
+      closesRow: classified.closesRow,
+      stopBatch: classified.stopBatch,
     };
   }
+}
+
+export interface BatchLeadRequest {
+  row: number;
+  lead: LeadPayload;
+}
+
+/**
+ * POST many leads with UrlFetchApp.fetchAll (chunks of FETCH_BATCH_SIZE).
+ * Stops issuing further chunks if an auth error is seen.
+ */
+export function sendLeadsBatch(
+    requests: BatchLeadRequest[],
+    config: IntegrationConfig,
+): SendLeadResult[] {
+  const results: SendLeadResult[] = [];
+  if (requests.length === 0) {
+    return results;
+  }
+
+  for (let offset = 0; offset < requests.length; offset += FETCH_BATCH_SIZE) {
+    const chunk = requests.slice(offset, offset + FETCH_BATCH_SIZE);
+    const fetchRequests = chunk.map((item) => ({
+      url: config.apiEndpoint,
+      ...buildFetchOptions(item.lead, config),
+    }));
+
+    let responses: GoogleAppsScript.URL_Fetch.HTTPResponse[];
+    try {
+      responses = UrlFetchApp.fetchAll(fetchRequests);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      chunk.forEach((item) => {
+        logError('api', `Falha no lote | linha=${item.row}`, message);
+        const classified = classifyHttpResult(0);
+        results.push({
+          success: false,
+          outcome: 'error',
+          statusCode: 0,
+          message: `Falha na requisição: ${message}`,
+          closesRow: classified.closesRow,
+          stopBatch: classified.stopBatch,
+        });
+      });
+      break;
+    }
+
+    let stop = false;
+    chunk.forEach((item, index) => {
+      const response = responses[index];
+      const statusCode = response.getResponseCode();
+      const responseBody = response.getContentText();
+      const result = resultFromHttp(statusCode, responseBody, item.lead);
+      if (!result.success) {
+        logError(
+            'api',
+            `Falha HTTP | linha=${item.row} | status=${statusCode}`,
+            responseBody,
+        );
+      } else {
+        logInfo(
+            'api',
+            `Lead ${result.outcome === 'duplicate' ? 'já existente' : 'enviado'} | ` +
+            `linha=${item.row} | status=${statusCode}`,
+        );
+      }
+      results.push(result);
+      if (result.stopBatch) {
+        stop = true;
+      }
+    });
+
+    if (stop) {
+      break;
+    }
+  }
+
+  return results;
 }

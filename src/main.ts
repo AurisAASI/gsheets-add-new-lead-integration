@@ -6,12 +6,13 @@ import {
   handleOpenHistory,
   handleRefreshColumns,
   handleReprocessLastRow,
+  handleReprocessUnsent,
   handleSaveConfiguration,
   handleTestLastRow,
   onSheetsHomepage,
 } from './ui/homepage';
-import {onChangeHandler} from './triggers/onChangeHandler';
-import {setupChangeTrigger} from './triggers/triggerManager';
+import {onChangeHandler, onHourlySweep} from './triggers/onChangeHandler';
+import {setupAllIntegrationTriggers} from './triggers/triggerManager';
 
 declare const globalThis: Record<string, unknown>;
 
@@ -20,12 +21,12 @@ function onInstall(_e: GoogleAppsScript.Events.SheetsOnOpen): void {
     const config = getConfig();
     if (config.enabled && isConfigComplete(config)) {
       ensureHistorySheet();
-      const ok = setupChangeTrigger();
+      const ok = setupAllIntegrationTriggers();
       logInfo(
           'install',
           ok ?
-            'onInstall concluído | trigger onChange configurado' :
-            'onInstall concluído | falha ao configurar trigger onChange',
+            'onInstall concluído | triggers onChange + horário configurados' :
+            'onInstall concluído | falha ao configurar triggers',
       );
       return;
     }
@@ -44,11 +45,13 @@ const exportedFunctions = {
   onInstall,
   onSheetsHomepage,
   onChangeHandler,
+  onHourlySweep,
   handleSaveConfiguration,
   handleDisableIntegration,
   handleRefreshColumns,
   handleTestLastRow,
   handleReprocessLastRow,
+  handleReprocessUnsent,
   handleOpenHistory,
 };
 

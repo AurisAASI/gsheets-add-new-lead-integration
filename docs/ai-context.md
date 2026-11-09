@@ -12,7 +12,8 @@ Google Workspace Add-on for Google Sheets that automatically sends new lead rows
 - **Language:** TypeScript → esbuild bundle → single `dist/Code.js`
 - **CLI:** clasp 3.x for push/deploy
 - **UI:** CardService (Google Workspace Add-on framework)
-- **Trigger:** Installable `onChange` (NOT `onEdit` — API writes don't fire onEdit)
+- **Triggers:** Installable `onChange` + hourly `onHourlySweep` (NOT `onEdit`)
+- **Tests:** `node:test` via `tsx` on pure modules under `src/sync/`
 
 ## File map
 
@@ -21,116 +22,73 @@ Google Workspace Add-on for Google Sheets that automatically sends new lead rows
 | `src/main.ts` | Entry point; assigns functions to `globalThis` for GAS |
 | `src/appsscript.json` | Manifest: OAuth scopes, add-on name, homepageTrigger |
 | `src/types.ts` | Shared types, constants, property keys |
-| `src/config/settings.ts` | Read/write DocumentProperties |
-| `src/mapping/leadMapper.ts` | Map PT column headers → API payload |
-| `src/api/leadClient.ts` | `UrlFetchApp.fetch` POST to Lead Control |
+| `src/config/settings.ts` | DocumentProperties only (+ one-time UserProperties migrate) |
+| `src/mapping/leadMapper.ts` | Map columns → API payload (phone/status sanitize) |
+| `src/api/leadClient.ts` | `UrlFetchApp.fetch` / `fetchAll` POST to Lead Control |
+| `src/sync/*` | Pure sync logic + `processPendingRows` engine |
 | `src/logging/logger.ts` | Stackdriver / Executions logging |
-| `src/logging/requestLog.ts` | Auto-created history sheet for send results |
-| `src/triggers/triggerManager.ts` | Create/delete installable onChange trigger |
-| `src/triggers/onChangeHandler.ts` | Main handler: debounce, process new rows, toasts |
+| `src/logging/requestLog.ts` | History sheet (batch append) |
+| `src/triggers/triggerManager.ts` | Create/delete onChange + hourly triggers |
+| `src/triggers/onChangeHandler.ts` | Quiet-period token wait + handlers |
 | `src/ui/homepage.ts` | CardService config UI + action handlers |
-| `src/ui/notifications.ts` | Spreadsheet toasts |
+| `test/sync.test.ts` | Pure-function tests |
 | `scripts/build.mjs` | esbuild + copy appsscript.json to dist |
 | `scripts/verify-build.mjs` | Verify exported global functions exist in bundle |
-| `.clasp.dev.json` / `.clasp.prod.json` | Local clasp config (gitignored) |
 
 ## Invariants — DO NOT BREAK
 
-1. **Use `onChange`, never `onEdit`** for detecting API-appended rows
+1. **Use `onChange`, never `onEdit`** for detecting API-appended rows; accept **`OTHER`**
 2. **Never hardcode** API keys, endpoints, or company IDs — only DocumentProperties
-3. **Global functions** (`onSheetsHomepage`, `onChangeHandler`, etc.) MUST be assigned to `globalThis` in `main.ts` — GAS invokes them by name
-4. **`lastProcessedRow` cursor** prevents re-sending historical rows; initialize to `getLastRow()` on first save
-5. **Installable triggers** for add-ons must be created programmatically (`ScriptApp.newTrigger`), never manually in the editor
-6. **`clasp push` ≠ deploy** — Marketplace users see `clasp deploy` versions, not @HEAD
+3. **Global functions** MUST be assigned to `globalThis` in `main.ts`
+4. **Cursor** is `settledThrough` + `openRows` (migrate from legacy `lastProcessedRow`)
+5. **Installable triggers** must be created with `ScriptApp.newTrigger`
+6. **`clasp push` ≠ deploy** — Marketplace users see `clasp deploy` versions
 7. **Required API fields:** `fullName`, `phone`, `city`, `companyID`, `source`
-8. **Column mapping** is case-insensitive: `nome`→`fullName`, `telefone`→`phone`, `cidade`→`city`, `email`→`email`, `fonte`→`source`, `status`→`statusLead`
-9. **Idempotent API responses** (`IDEMPOTENT_API_RULES` in `leadClient.ts`) are treated as success — cursor advances, no error toast, no reprocessing (e.g. HTTP 409 "already exists")
-10. **Never monitor `Lead Control - Histórico`** — reserved sheet; exclude from sheet picker; set CacheService write flag before history writes so `onChange` ignores echo
-11. **History sheet auto-provision** — when `enabled` and config is complete, `buildHomepageCard` and `onInstall` call `ensureHistorySheet()` so already-configured spreadsheets get the tab after an add-on update without re-saving
+8. **Column mapping** is case-insensitive
+9. **409 already exists** closes the row as Duplicado (idempotent)
+10. **Never monitor `Lead Control - Histórico`** as the source sheet
+11. **Single engine** `processPendingRows` for onChange, hourly, and reprocess-50
+12. **Quiet token wait** (~8s) — never drop subsequent events without a later pass
+13. **Incomplete rows** stay pending for 3 minutes before Ignorado; do not block complete rows below
+14. **400** closes that row and continues; **401/403** stop the batch; **5xx/0** retry
 
 ## Data flow
 
 ```
 External integration → Sheets API append row
-  → onChange trigger fires
-  → onChangeHandler checks history-write flag + auth + enabled + debounce
-  → processNewRows (document lock): rows (lastProcessedRow+1)..getLastRow()
-  → leadMapper.mapRowToLead → leadClient.sendLeadToApi
-  → appendRequestLog to Lead Control - Histórico
-  → update lastProcessedRow (per row; stops on real errors)
+  → onChange (EDIT | INSERT_ROW | OTHER)
+  → set quiet token → sleep ~8s → owner processes
+  → processPendingRows (document lock)
+  → map + sanitize → fetchAll POST
+  → appendRequestLogBatch → save settledThrough/openRows
   → toast feedback
+
+Hourly / Reprocess 50 → same processPendingRows
 ```
 
 ## Common tasks
 
-### Add a new column to the payload
+### Debug automatic send
 
-1. Add field to `LeadPayload` in `src/types.ts`
-2. Add mapping in `COLUMN_MAP` in `src/mapping/leadMapper.ts`
-3. Update `docs/api-contract.md` and `docs/configuration.md`
+- Executions log: look for `changeType=OTHER`, `Token quieto`, `Lote concluído`
+- History tab: Sucesso / Duplicado / Erro / Ignorado
+- Confirm triggers: onChangeHandler + onHourlySweep
+- `npm run logs:dev`
 
-### Change default values
-
-Edit `DEFAULT_SOURCE`, `DEFAULT_STATUS`, `DEFAULT_SHEET_NAME` in `src/types.ts`
-
-### Debug trigger not firing
-
-- Confirm `enabled=true` in DocumentProperties
-- Check trigger exists: Apps Script editor → Triggers (clock icon)
-- Remember: onEdit does NOT fire for API writes
-- Use `npm run logs:dev` for Stackdriver logs
-
-### Add a new CardService button
-
-1. Add handler function in `src/ui/homepage.ts`
-2. Export it in `src/main.ts` → `exportedFunctions`
-3. Add button in `buildActionsSection()`
-4. Update `scripts/verify-build.mjs` required functions list
-
-### Deploy to production
+### Deploy
 
 ```bash
 npm run verify
-npm run deploy:prod
+npm run push:dev      # develop / test deployment
+npm run deploy:prod   # main / Marketplace (approval)
 ```
-
-## External dependencies
-
-| Dependency | Usage |
-|------------|-------|
-| Lead Control API | `POST {apiEndpoint}` with `x-api-key` header |
-| Google Sheets API | Read sheet data (via SpreadsheetApp service) |
-| Google Apps Script Services | SpreadsheetApp, PropertiesService, CacheService, LockService, UrlFetchApp, ScriptApp, CardService |
-
-## OAuth scopes (appsscript.json)
-
-- `spreadsheets.currentonly` — read/write current spreadsheet (includes auto-created history tab)
-- `script.scriptapp` — manage installable triggers
-- `script.external_request` — HTTP POST to Lead Control API
-
-## Gotchas
-
-- `onChange` event does NOT include which row changed → must use `lastProcessedRow` cursor
-- `changeType` for API appends is usually `EDIT`, not `INSERT_ROW`
-- Integrations filling multiple cells may fire onChange multiple times → debounce with CacheService (5s TTL)
-- Writing to the history sheet also fires `onChange` → set history-write CacheService flag before append
-- CardService form inputs arrive as `e.formInputs.fieldName[0]` (array)
-- clasp 3.x does not transpile TypeScript — always run `npm run build` before push
-- clasp 3.x uses `open-script` instead of the removed `open` command (wrapped by `npm run open:dev`)
-- `.clasp.json` created by `clasp create` overwrites `dist/appsscript.json` — rebuild after create
 
 ## Build commands
 
 ```bash
-npm run build      # esbuild → dist/Code.js
-npm run verify     # build + check exports
-npm run push:dev   # push to dev Apps Script project
-npm run push:prod  # push to prod Apps Script project
-npm run deploy:prod # push + clasp deploy
+npm test
+npm run build
+npm run verify   # test + build + export check
+npm run push:dev
+npm run deploy:prod
 ```
-
-## Environment files (gitignored)
-
-- `.clasp.dev.json` — dev scriptId
-- `.clasp.prod.json` — prod scriptId
-- Templates: `.clasp.dev.json.example`, `.clasp.prod.json.example`

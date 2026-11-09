@@ -1,3 +1,5 @@
+import {sanitizePhoneCell} from '../sync/phoneSanitize';
+import {sanitizeStatusLead} from '../sync/statusSanitize';
 import {
   DEFAULT_SOURCE,
   DEFAULT_STATUS,
@@ -43,6 +45,16 @@ function getVal(
   return index !== -1 ? rowData[index] : null;
 }
 
+function cellToString(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : String(value);
+  }
+  return String(value).trim();
+}
+
 export function getSheetHeaders(
     sheet: GoogleAppsScript.Spreadsheet.Sheet,
 ): string[] {
@@ -58,32 +70,55 @@ export function getSheetHeaders(
       .filter((h) => h.length > 0);
 }
 
+export interface MapRowResult {
+  lead: LeadPayload;
+  statusWarning?: string;
+}
+
 export function mapRowToLead(
     headers: string[],
     rowData: unknown[],
     config: IntegrationConfig,
 ): LeadPayload {
+  return mapRowToLeadDetailed(headers, rowData, config).lead;
+}
+
+export function mapRowToLeadDetailed(
+    headers: string[],
+    rowData: unknown[],
+    config: IntegrationConfig,
+): MapRowResult {
   const mappings = config.columnMappings;
 
   const emailCol = mappings.email?.trim();
   const statusCol = mappings.statusLead?.trim();
   const sourceCol = mappings.source?.trim();
 
-  return {
-    fullName: String(getVal(headers, rowData, mappings.fullName) || '').trim(),
-    phone: String(getVal(headers, rowData, mappings.phone) || '').trim(),
-    city: String(getVal(headers, rowData, mappings.city) || '').trim(),
+  const rawStatus = statusCol ?
+    cellToString(getVal(headers, rowData, statusCol)) || DEFAULT_STATUS :
+    DEFAULT_STATUS;
+  const statusResult = sanitizeStatusLead(rawStatus);
+
+  const lead: LeadPayload = {
+    fullName: cellToString(getVal(headers, rowData, mappings.fullName)),
+    phone: sanitizePhoneCell(getVal(headers, rowData, mappings.phone)),
+    city: cellToString(getVal(headers, rowData, mappings.city)),
     email: emailCol ?
-      String(getVal(headers, rowData, emailCol) || '').trim() :
+      cellToString(getVal(headers, rowData, emailCol)) :
       '',
     source: sourceCol ?
-      String(getVal(headers, rowData, sourceCol) || DEFAULT_SOURCE).trim() :
+      cellToString(getVal(headers, rowData, sourceCol)) || DEFAULT_SOURCE :
       DEFAULT_SOURCE,
     companyID: config.companyId,
-    statusLead: statusCol ?
-      String(getVal(headers, rowData, statusCol) || DEFAULT_STATUS).trim() :
-      DEFAULT_STATUS,
+    statusLead: statusResult.statusLead,
   };
+
+  const statusWarning =
+    statusResult.usedDefault && statusResult.original ?
+      `Status "${statusResult.original}" inválido — usando ${DEFAULT_STATUS}` :
+      undefined;
+
+  return {lead, statusWarning};
 }
 
 export function getMissingRequiredFields(lead: LeadPayload): RequiredLeadField[] {
@@ -120,4 +155,36 @@ export function readRowData(
 
   const rowData = sheet.getRange(row, 1, 1, lastColumn).getValues()[0];
   return {headers, rowData};
+}
+
+/**
+ * Read header + a contiguous block of rows in one getValues call.
+ */
+export function readRowBlock(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    startRow: number,
+    endRow: number,
+): {headers: string[]; rows: Array<{row: number; rowData: unknown[]}>} | null {
+  if (endRow < startRow || startRow <= HEADER_ROW) {
+    return null;
+  }
+
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) {
+    return null;
+  }
+
+  const headers = sheet
+      .getRange(HEADER_ROW, 1, 1, lastColumn)
+      .getValues()[0]
+      .map((h) => String(h));
+
+  const height = endRow - startRow + 1;
+  const values = sheet.getRange(startRow, 1, height, lastColumn).getValues();
+  const rows = values.map((rowData, index) => ({
+    row: startRow + index,
+    rowData: rowData as unknown[],
+  }));
+
+  return {headers, rows};
 }

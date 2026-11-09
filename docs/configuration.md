@@ -82,32 +82,37 @@ O painel do add-on mostra um resumo do **último envio** na seção Status. Use 
 ## Como funciona o envio automático
 
 1. Uma integração externa (Meta Lead Ads, Google Ads, Zapier, etc.) adiciona uma nova linha na planilha
-2. O add-on detecta a nova linha automaticamente
-3. Os dados são validados e enviados para o Lead Control
+2. O add-on detecta a alteração (`onChange`, inclusive escritas via API)
+3. Após uma breve espera (para a linha terminar de ser preenchida), os dados são validados e enviados
 4. O resultado é registrado na aba **Lead Control - Histórico**
 5. Uma notificação aparece na planilha confirmando o envio ou informando erros
+6. A cada hora, um passe de segurança revisa linhas ainda pendentes
+
+Linhas incompletas ficam pendentes por alguns minutos; linhas completas abaixo delas **não** ficam bloqueadas. Erros permanentes de uma linha (ex.: telefone inválido) não travam as seguintes.
 
 ## Ações disponíveis
 
 | Botão | Função |
 |-------|--------|
-| **Salvar e ativar** | Salva credenciais, mapeamento, ativa o monitoramento e cria a aba de histórico |
+| **Salvar e ativar** | Salva credenciais, mapeamento, ativa onChange + passe horário e cria a aba de histórico |
 | **Atualizar colunas** | Recarrega os cabeçalhos da planilha nos dropdowns |
-| **Desativar integração** | Para o envio automático |
-| **Testar envio (última linha)** | Envia manualmente a última linha (útil para teste) |
-| **Reprocessar última linha** | Reenvia a última linha mesmo que já tenha sido processada |
+| **Desativar integração** | Para o envio automático e remove os triggers |
+| **Testar envio (última linha)** | Envia manualmente a última linha (diagnóstico; não prova o gatilho) |
+| **Reprocessar última linha** | Reenvia a última linha |
+| **Reprocessar não enviados (50)** | Rede de segurança: reenvia até 50 linhas recentes que ainda não estão como Sucesso/Duplicado |
 | **Abrir histórico** | Cria (se necessário) e ativa a aba Lead Control - Histórico |
 
 ## Solução de problemas
 
 | Sintoma | Possível causa | Ação |
 |---------|---------------|------|
-| Leads não são enviados | Integração desativada | Abra o add-on e clique em Salvar e ativar |
+| Leads não são enviados | Integração desativada ou trigger ausente | Abra o add-on e clique em Salvar e ativar |
 | Erro de campos ausentes | Mapeamento incorreto ou dados vazios | Verifique mapeamento e conteúdo da linha; confira a aba de histórico |
 | Dropdowns vazios | Aba sem cabeçalhos na linha 1 | Confira a aba selecionada e a linha 1; clique em Atualizar colunas |
 | Erro 401/403 na API | Chave de API incorreta | Veja a aba **Lead Control - Histórico** e confira credenciais no [Lead Control](https://app.leadcontrol.ia.br) |
 | Não sei se o envio funcionou | Toast sumiu / planilha estava fechada | Abra a aba **Lead Control - Histórico** ou use **Abrir histórico** no painel |
 | Add-on pede reautorização / leads param após update | Atualização do add-on ou permissões alteradas | Abra Extensões → Lead Control e autorize novamente |
+| Vários leads antigos faltando | Gatilho falhou em algum momento | Use **Reprocessar não enviados (50)**; telefones já cadastrados aparecem como Duplicado |
 
 ## Suporte
 

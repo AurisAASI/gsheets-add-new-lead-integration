@@ -64,12 +64,16 @@ Linhas com campos obrigatórios ausentes são **ignoradas** (não bloqueiam o pr
 
 | Código | Significado | Ação do add-on |
 |--------|-------------|----------------|
-| `200` | Sucesso | Toast de sucesso |
-| `201` | Criado | Toast de sucesso |
-| `400` | Payload inválido | Toast de erro com corpo da resposta |
-| `401`/`403` | Autenticação | Toast de erro — verificar API Key |
-| `409` | Lead já existe (telefone duplicado) | Sucesso idempotente — cursor avança, sem toast de erro |
-| `5xx` | Erro servidor | Toast de erro — log no Stackdriver |
+| `200` | Sucesso | Fecha a linha (Sucesso); cursor pode avançar |
+| `201` | Criado | Fecha a linha (Sucesso); cursor pode avançar |
+| `400` | Payload inválido | Fecha só aquela linha (Erro permanente); demais seguem |
+| `401`/`403` | Autenticação | Para o lote; não avança o cursor; verificar API Key |
+| `409` | Lead já existe (telefone duplicado) | Fecha a linha como Duplicado (idempotente) |
+| `429` / `5xx` / rede | Temporário | Mantém a linha em retry; próximo passe tenta de novo |
+
+Mensagens de erro no histórico preferem `error.code` + `error.message` do envelope da API.
+
+Status de lead fora do catálogo canônico do Lead Control **não** é enviado: o add-on usa `Aguardando contato` e registra um aviso.
 
 ## Exemplo de implementação
 
