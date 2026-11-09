@@ -1,25 +1,28 @@
-import {sendLeadToApi, SendLeadOutcome} from '../api/leadClient';
-import {
-  getConfig,
-  getConfiguredSheet,
-  setLastProcessedRow,
-} from '../config/settings';
-import {logError, logInfo, logWarn, sanitizeEndpoint} from '../logging/logger';
+import {getConfig} from '../config/settings';
+import {logError, logInfo, logWarn} from '../logging/logger';
 import {
   appendRequestLog,
   isHistoryWriteInProgress,
-  resultFromOutcome,
 } from '../logging/requestLog';
+import {isRelevantChangeType} from '../sync/changeTypes';
 import {
-  formatMissingFields,
-  getMissingRequiredFields,
-  mapRowToLead,
-  readRowData,
-} from '../mapping/leadMapper';
+  processLastRow as processLastRowEngine,
+  processPendingRows,
+  ProcessSummary,
+  reprocessUnsentRows,
+} from '../sync/processPending';
 import {
-  DEBOUNCE_SECONDS,
-  HEADER_ROW,
+  buildQuietToken,
+  QUIET_MAX_WAIT_MS,
+  remainingQuietSleepMs,
+  stillOwnsQuietToken,
+} from '../sync/quietPeriod';
+import {
+  AUTH_WARN_CACHE_KEY,
+  AUTH_WARN_TTL_SECONDS,
   HISTORY_SHEET_NAME,
+  QUIET_TOKEN_CACHE_KEY,
+  QUIET_TOKEN_TTL_SECONDS,
   RequestLogOrigin,
 } from '../types';
 import {
@@ -29,29 +32,6 @@ import {
 } from '../ui/notifications';
 import {ensureAuthorization} from './triggerManager';
 
-const RELEVANT_CHANGE_TYPES = new Set(['EDIT', 'INSERT_ROW']);
-const MAX_ERROR_MESSAGES_IN_LOG = 3;
-const LOCK_TIMEOUT_MS = 30000;
-
-interface RowProcessResult {
-  sent: number;
-  skipped: number;
-  errors: number;
-  errorMessage?: string;
-}
-
-function getDebounceKey(): string | null {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) {
-      return null;
-    }
-    return `lead-control:onChange:${ss.getId()}`;
-  } catch {
-    return null;
-  }
-}
-
 function getDocumentCacheSafe(): GoogleAppsScript.Cache.Cache | null {
   try {
     return CacheService.getDocumentCache();
@@ -60,295 +40,167 @@ function getDocumentCacheSafe(): GoogleAppsScript.Cache.Cache | null {
   }
 }
 
-function isDebounced(): boolean {
-  const cache = getDocumentCacheSafe();
-  const key = getDebounceKey();
-  if (!cache || !key) {
-    return false;
-  }
-  return cache.get(key) !== null;
-}
-
-function setDebounce(): void {
-  const cache = getDocumentCacheSafe();
-  const key = getDebounceKey();
-  if (!cache || !key) {
-    return;
-  }
-  cache.put(key, '1', DEBOUNCE_SECONDS);
-}
-
-function formatBatchSummary(
-    sent: number,
-    skipped: number,
-    errors: number,
-    processedUntil: number,
-): string {
-  return `enviados=${sent} | ignorados=${skipped} | erros=${errors} | atéLinha=${processedUntil}`;
-}
-
-function withDocumentLock<T>(fn: () => T): T {
-  const lock = LockService.getDocumentLock();
-  const acquired = lock.tryLock(LOCK_TIMEOUT_MS);
-  if (!acquired) {
-    throw new Error('Não foi possível obter lock do documento (timeout).');
+function resolveSpreadsheet(
+    e?: GoogleAppsScript.Events.SheetsOnChange,
+): GoogleAppsScript.Spreadsheet.Spreadsheet | null {
+  if (e && e.source) {
+    return e.source;
   }
   try {
-    return fn();
-  } finally {
-    lock.releaseLock();
+    return SpreadsheetApp.getActiveSpreadsheet();
+  } catch {
+    return null;
   }
 }
 
-function processRow(
-    sheet: GoogleAppsScript.Spreadsheet.Sheet,
-    row: number,
-    origin: RequestLogOrigin = 'Automático',
-): RowProcessResult {
-  const config = getConfig();
-  const endpointHost = sanitizeEndpoint(config.apiEndpoint);
-  const rowInfo = readRowData(sheet, row);
-  if (!rowInfo) {
-    logWarn('onChange', `Linha ${row} ilegível ou vazia — ignorada`);
-    appendRequestLog({
-      origin,
-      row,
-      name: '',
-      result: 'Ignorado',
-      statusCode: '',
-      message: 'Linha ilegível ou vazia',
-      endpoint: endpointHost,
-    });
-    return {sent: 0, skipped: 1, errors: 0};
+function sleepMs(ms: number): void {
+  if (ms <= 0) {
+    return;
   }
+  Utilities.sleep(ms);
+}
 
-  const lead = mapRowToLead(rowInfo.headers, rowInfo.rowData, config);
-  const missing = getMissingRequiredFields(lead);
-
-  if (missing.length > 0) {
-    logWarn(
-        'onChange',
-        `Linha ${row} ignorada | campos ausentes: ${missing.join(', ')}`,
-    );
-    appendRequestLog({
-      origin,
-      row,
-      name: lead.fullName || '',
-      result: 'Ignorado',
-      statusCode: '',
-      message: `Campos ausentes: ${formatMissingFields(missing)}`,
-      endpoint: endpointHost,
-    });
-    return {sent: 0, skipped: 1, errors: 0};
+function recordAuthRequiredOnce(
+    spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet | null,
+): void {
+  const cache = getDocumentCacheSafe();
+  if (cache && cache.get(AUTH_WARN_CACHE_KEY)) {
+    return;
   }
-
-  const result = sendLeadToApi(lead, config, {row});
+  if (cache) {
+    cache.put(AUTH_WARN_CACHE_KEY, '1', AUTH_WARN_TTL_SECONDS);
+  }
   appendRequestLog({
-    origin,
-    row,
-    name: lead.fullName || '',
-    result: resultFromOutcome(result.outcome),
-    statusCode: result.statusCode || '',
-    message: result.message,
-    endpoint: endpointHost,
-  });
+    origin: 'Automático',
+    row: '',
+    name: '',
+    result: 'Erro',
+    statusCode: '',
+    message:
+      'Reautorização necessária. Abra Extensões → Lead Control e autorize novamente.',
+    endpoint: '',
+  }, spreadsheet || undefined);
+}
 
-  if (result.success) {
-    return {sent: 1, skipped: 0, errors: 0};
+function formatBatchSummary(summary: ProcessSummary): string {
+  return (
+    `enviados=${summary.sent} | duplicados=${summary.duplicates} | ` +
+    `ignorados=${summary.skipped} | erros=${summary.errors} | ` +
+    `pendentes=${summary.pending} | settledThrough=${summary.processedUntil}`
+  );
+}
+
+function notifySummary(summary: ProcessSummary, previousSettled: number): void {
+  if (summary.authBlocked) {
+    showErrorToast(
+        'Credenciais recusadas pela API. Verifique a chave de API no painel.',
+    );
+    return;
+  }
+  if (summary.sent > 0) {
+    showSuccessToast(`${summary.sent} lead(s) enviado(s) com sucesso.`);
+  } else if (summary.errors > 0) {
+    const firstError = summary.errorMessages[0] || 'erro desconhecido';
+    showErrorToast(
+        `${summary.errors} lead(s) com erro. Ex.: ${firstError}. ` +
+        'Veja a aba Lead Control - Histórico.',
+    );
+  } else if (summary.skipped > 0 && summary.processedUntil > previousSettled) {
+    showWarningToast(
+        `${summary.skipped} linha(s) ignorada(s) por dados incompletos.`,
+    );
+  }
+}
+
+/**
+ * Wait until quiet period owns this token, then process pending rows.
+ */
+function runQuietProcess(
+    spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    token: string,
+): void {
+  const startMs = Date.now();
+  const cache = getDocumentCacheSafe();
+
+  while (true) {
+    const sleepFor = remainingQuietSleepMs(startMs, Date.now());
+    if (sleepFor <= 0) {
+      break;
+    }
+    sleepMs(sleepFor);
+    const latest = cache ? cache.get(QUIET_TOKEN_CACHE_KEY) : token;
+    if (!stillOwnsQuietToken(token, latest)) {
+      logInfo('onChange', 'Token quieto substituído — execução cede o passe');
+      return;
+    }
+    // Owned after one quiet wait → process
+    break;
   }
 
-  return {
-    sent: 0,
-    skipped: 0,
-    errors: 1,
-    errorMessage: `Linha ${row}: ${result.message}`,
-  };
+  // Final ownership check after max wait path
+  const latest = cache ? cache.get(QUIET_TOKEN_CACHE_KEY) : token;
+  if (!stillOwnsQuietToken(token, latest)) {
+    logInfo('onChange', 'Token quieto substituído no fim da espera — cede');
+    return;
+  }
+
+  const config = getConfig();
+  const previousSettled = config.settledThrough;
+  const summary = processPendingRows(spreadsheet, 'Automático');
+  logInfo('onChange', `Concluído | ${formatBatchSummary(summary)}`);
+  notifySummary(summary, previousSettled);
 }
 
 export function processNewRows(
     spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
-): {
-  sent: number;
-  skipped: number;
-  errors: number;
-  processedUntil: number;
-  errorMessages: string[];
-} {
-  return withDocumentLock(() => {
-    const config = getConfig();
-    if (!config.enabled) {
-      return {
-        sent: 0,
-        skipped: 0,
-        errors: 0,
-        processedUntil: config.lastProcessedRow,
-        errorMessages: [],
-      };
-    }
-
-    if (config.sheetName === HISTORY_SHEET_NAME) {
-      logWarn('onChange', 'Aba de histórico configurada como fonte — ignorado');
-      return {
-        sent: 0,
-        skipped: 0,
-        errors: 0,
-        processedUntil: config.lastProcessedRow,
-        errorMessages: [],
-      };
-    }
-
-    const sheet = getConfiguredSheet(spreadsheet);
-    if (!sheet) {
-      logError('onChange', `Aba "${config.sheetName}" não encontrada`);
-      return {
-        sent: 0,
-        skipped: 0,
-        errors: 0,
-        processedUntil: config.lastProcessedRow,
-        errorMessages: [],
-      };
-    }
-
-    const lastRow = sheet.getLastRow();
-    const startRow = Math.max(config.lastProcessedRow + 1, HEADER_ROW + 1);
-
-    if (lastRow < startRow) {
-      logInfo('onChange', 'Nenhuma linha nova para processar');
-      return {
-        sent: 0,
-        skipped: 0,
-        errors: 0,
-        processedUntil: config.lastProcessedRow,
-        errorMessages: [],
-      };
-    }
-
-    logInfo(
-        'onChange',
-        `Processando linhas | aba=${config.sheetName} | startRow=${startRow} | ` +
-        `lastRow=${lastRow} | lastProcessedRow=${config.lastProcessedRow}`,
-    );
-
-    let sent = 0;
-    let skipped = 0;
-    let errors = 0;
-    let processedUntil = config.lastProcessedRow;
-    const errorMessages: string[] = [];
-
-    for (let row = startRow; row <= lastRow; row++) {
-      const result = processRow(sheet, row, 'Automático');
-      sent += result.sent;
-      skipped += result.skipped;
-      errors += result.errors;
-      if (result.errorMessage) {
-        errorMessages.push(result.errorMessage);
-      }
-
-      if (result.errors > 0) {
-        break;
-      }
-
-      setLastProcessedRow(row);
-      processedUntil = row;
-    }
-
-    logInfo(
-        'onChange',
-        `Lote concluído | ${formatBatchSummary(sent, skipped, errors, processedUntil)}`,
-    );
-
-    if (errorMessages.length > 0) {
-      const preview = errorMessages
-          .slice(0, MAX_ERROR_MESSAGES_IN_LOG)
-          .join('; ');
-      const suffix = errorMessages.length > MAX_ERROR_MESSAGES_IN_LOG ?
-        ` (+${errorMessages.length - MAX_ERROR_MESSAGES_IN_LOG} erro(s))` :
-        '';
-      logError('onChange', `Erros no lote | ${preview}${suffix}`);
-    }
-
-    return {sent, skipped, errors, processedUntil, errorMessages};
-  });
+): ProcessSummary {
+  return processPendingRows(spreadsheet, 'Automático');
 }
 
 export function processLastRow(
     spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
     origin: RequestLogOrigin = 'Teste',
-): {success: boolean; message: string; outcome?: SendLeadOutcome} {
-  return withDocumentLock(() => {
+): {success: boolean; message: string; outcome?: 'created' | 'duplicate' | 'error'} {
+  return processLastRowEngine(spreadsheet, origin);
+}
+
+export function onHourlySweep(): void {
+  try {
+    if (!ensureAuthorization()) {
+      recordAuthRequiredOnce(resolveSpreadsheet());
+      logWarn('onChange', 'Passe horário interrompido — reautorização necessária');
+      return;
+    }
+
     const config = getConfig();
-    const sheet = getConfiguredSheet(spreadsheet);
-
-    if (!sheet) {
-      const message = `Aba "${config.sheetName}" não encontrada.`;
-      logError('onChange', message);
-      return {success: false, message};
+    if (!config.enabled) {
+      logInfo('onChange', 'Passe horário ignorado — integração desativada');
+      return;
     }
 
-    const lastRow = sheet.getLastRow();
-    if (lastRow <= HEADER_ROW) {
-      const message = 'Não há linhas de dados para enviar.';
-      logWarn('onChange', message);
-      return {success: false, message};
+    const spreadsheet = resolveSpreadsheet();
+    if (!spreadsheet) {
+      logWarn('onChange', 'Passe horário sem planilha disponível');
+      return;
     }
 
-    const rowInfo = readRowData(sheet, lastRow);
-    if (!rowInfo) {
-      const message = 'Não foi possível ler a última linha.';
-      logWarn('onChange', `Linha ${lastRow} ilegível ou vazia`);
-      appendRequestLog({
-        origin,
-        row: lastRow,
-        name: '',
-        result: 'Ignorado',
-        statusCode: '',
-        message: 'Linha ilegível ou vazia',
-        endpoint: sanitizeEndpoint(config.apiEndpoint),
-      });
-      return {success: false, message};
-    }
+    const summary = processPendingRows(spreadsheet, 'Automático');
+    logInfo('onChange', `Passe horário | ${formatBatchSummary(summary)}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logError('onChange', 'Exceção no passe horário', message);
+    throw error;
+  }
+}
 
-    const lead = mapRowToLead(rowInfo.headers, rowInfo.rowData, config);
-    const missing = getMissingRequiredFields(lead);
-    if (missing.length > 0) {
-      const message = `Campos obrigatórios ausentes: ${formatMissingFields(missing)}`;
-      logWarn(
-          'onChange',
-          `Linha ${lastRow} ignorada | campos ausentes: ${missing.join(', ')}`,
-      );
-      appendRequestLog({
-        origin,
-        row: lastRow,
-        name: lead.fullName || '',
-        result: 'Ignorado',
-        statusCode: '',
-        message,
-        endpoint: sanitizeEndpoint(config.apiEndpoint),
-      });
-      return {success: false, message};
-    }
-
-    const result = sendLeadToApi(lead, config, {row: lastRow});
-    appendRequestLog({
-      origin,
-      row: lastRow,
-      name: lead.fullName || '',
-      result: resultFromOutcome(result.outcome),
-      statusCode: result.statusCode || '',
-      message: result.message,
-      endpoint: sanitizeEndpoint(config.apiEndpoint),
-    });
-    return {success: result.success, message: result.message, outcome: result.outcome};
-  });
+export function handleReprocessUnsent(): ProcessSummary {
+  const spreadsheet = resolveSpreadsheet();
+  return reprocessUnsentRows(spreadsheet || undefined);
 }
 
 export function onChangeHandler(e: GoogleAppsScript.Events.SheetsOnChange): void {
   try {
-    if (isHistoryWriteInProgress()) {
-      logInfo('onChange', 'Escrita de histórico em andamento — eco ignorado');
-      return;
-    }
-
+    const spreadsheet = resolveSpreadsheet(e);
     const config = getConfig();
 
     logInfo(
@@ -358,6 +210,7 @@ export function onChangeHandler(e: GoogleAppsScript.Events.SheetsOnChange): void
     );
 
     if (!ensureAuthorization()) {
+      recordAuthRequiredOnce(spreadsheet);
       return;
     }
 
@@ -371,47 +224,39 @@ export function onChangeHandler(e: GoogleAppsScript.Events.SheetsOnChange): void
       return;
     }
 
-    if (!RELEVANT_CHANGE_TYPES.has(e.changeType)) {
+    if (!isRelevantChangeType(e.changeType)) {
       logInfo('onChange', `Tipo de alteração ignorado: ${e.changeType}`);
       return;
     }
 
-    if (isDebounced()) {
-      logInfo('onChange', `Debounce ativo (${DEBOUNCE_SECONDS}s) — ignorado`);
-      return;
-    }
-    setDebounce();
-
-    const sheet = getConfiguredSheet();
-    if (!sheet) {
-      logError('onChange', `Aba "${config.sheetName}" não encontrada`);
-      return;
+    // History writes: still schedule a quiet pass for the source sheet,
+    // but skip if we somehow have no spreadsheet handle.
+    if (isHistoryWriteInProgress()) {
+      logInfo(
+          'onChange',
+          'Escrita de histórico detectada — agenda passe quieto mesmo assim',
+      );
     }
 
-    const result = processNewRows();
+    if (!spreadsheet) {
+      logError('onChange', 'Planilha do evento indisponível (e.source)');
+      return;
+    }
+
+    const token = buildQuietToken(
+        Date.now(),
+        String(Math.floor(Math.random() * 1e9)),
+    );
+    const cache = getDocumentCacheSafe();
+    if (cache) {
+      cache.put(QUIET_TOKEN_CACHE_KEY, token, QUIET_TOKEN_TTL_SECONDS);
+    }
+
     logInfo(
         'onChange',
-        `Concluído | ${formatBatchSummary(
-            result.sent,
-            result.skipped,
-            result.errors,
-            result.processedUntil,
-        )}`,
+        `Espera quieta iniciada | token=${token} | maxMs=${QUIET_MAX_WAIT_MS}`,
     );
-
-    if (result.sent > 0) {
-      showSuccessToast(`${result.sent} lead(s) enviado(s) com sucesso.`);
-    } else if (result.errors > 0) {
-      const firstError = result.errorMessages[0] || 'erro desconhecido';
-      showErrorToast(
-          `${result.errors} lead(s) com erro. Ex.: ${firstError}. ` +
-          'Veja a aba Lead Control - Histórico.',
-      );
-    } else if (result.skipped > 0 && result.processedUntil > config.lastProcessedRow) {
-      showWarningToast(
-          `${result.skipped} linha(s) ignorada(s) por dados incompletos.`,
-      );
-    }
+    runQuietProcess(spreadsheet, token);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logError('onChange', 'Exceção não tratada', message);

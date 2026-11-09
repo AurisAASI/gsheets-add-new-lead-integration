@@ -139,10 +139,38 @@ function entryToRow(entry: RequestLogEntry): Array<string | number> {
   ];
 }
 
+function normalizeLogEntry(
+    entry: Omit<RequestLogEntry, 'timestamp'> & {timestamp?: string},
+): RequestLogEntry {
+  return {
+    ...entry,
+    timestamp: entry.timestamp || formatTimestamp(),
+    message: truncateText(entry.message || ''),
+    endpoint: entry.endpoint ?
+      (entry.endpoint.includes('/') ?
+        sanitizeEndpoint(entry.endpoint) :
+        entry.endpoint) :
+      '',
+  };
+}
+
 export function appendRequestLog(
     entry: Omit<RequestLogEntry, 'timestamp'> & {timestamp?: string},
     spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
 ): void {
+  appendRequestLogBatch([entry], spreadsheet);
+}
+
+/**
+ * Append many history rows in a single sheet write.
+ */
+export function appendRequestLogBatch(
+    entries: Array<Omit<RequestLogEntry, 'timestamp'> & {timestamp?: string}>,
+    spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
+): void {
+  if (entries.length === 0) {
+    return;
+  }
   try {
     setHistoryWriteFlag();
     try {
@@ -151,18 +179,10 @@ export function appendRequestLog(
         return;
       }
 
-      const fullEntry: RequestLogEntry = {
-        ...entry,
-        timestamp: entry.timestamp || formatTimestamp(),
-        message: truncateText(entry.message || ''),
-        endpoint: entry.endpoint ?
-          (entry.endpoint.includes('/') ?
-            sanitizeEndpoint(entry.endpoint) :
-            entry.endpoint) :
-          '',
-      };
-
-      sheet.appendRow(entryToRow(fullEntry));
+      const rows = entries.map((entry) => entryToRow(normalizeLogEntry(entry)));
+      const startRow = sheet.getLastRow() + 1;
+      sheet.getRange(startRow, 1, rows.length, HISTORY_HEADERS.length)
+          .setValues(rows);
       trimHistoryIfNeeded(sheet);
     } finally {
       clearHistoryWriteFlag();
@@ -171,6 +191,56 @@ export function appendRequestLog(
     const message = error instanceof Error ? error.message : String(error);
     logWarn('config', `Falha ao gravar histórico de envio | ${message}`);
   }
+}
+
+/**
+ * Latest history result per row number (scans from bottom).
+ */
+export function getLatestResultByRows(
+    rowNumbers: number[],
+    spreadsheet?: GoogleAppsScript.Spreadsheet.Spreadsheet,
+): Map<number, RequestLogResult> {
+  const wanted = new Set(rowNumbers);
+  const latest = new Map<number, RequestLogResult>();
+  if (wanted.size === 0) {
+    return latest;
+  }
+
+  try {
+    const ss = spreadsheet || SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      return latest;
+    }
+    const sheet = ss.getSheetByName(HISTORY_SHEET_NAME);
+    if (!sheet) {
+      return latest;
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) {
+      return latest;
+    }
+
+    const values = sheet
+        .getRange(2, 1, lastRow - 1, HISTORY_HEADERS.length)
+        .getValues();
+
+    for (let i = values.length - 1; i >= 0; i--) {
+      const rowNum = Number(values[i][2]);
+      if (!wanted.has(rowNum) || latest.has(rowNum)) {
+        continue;
+      }
+      latest.set(rowNum, String(values[i][4] || '') as RequestLogResult);
+      if (latest.size === wanted.size) {
+        break;
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logWarn('config', `Falha ao ler histórico por linhas | ${message}`);
+  }
+
+  return latest;
 }
 
 export function getLatestRequestLog(

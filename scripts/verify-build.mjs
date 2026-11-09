@@ -14,12 +14,14 @@ const manifest = JSON.parse(
 const requiredFunctions = [
   manifest.addOns?.sheets?.homepageTrigger?.runFunction,
   'onChangeHandler',
+  'onHourlySweep',
   'onInstall',
   'handleSaveConfiguration',
   'handleDisableIntegration',
   'handleRefreshColumns',
   'handleTestLastRow',
   'handleReprocessLastRow',
+  'handleReprocessUnsent',
   'handleOpenHistory',
 ].filter(Boolean);
 

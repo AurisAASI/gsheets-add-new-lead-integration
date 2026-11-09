@@ -1,6 +1,7 @@
 import {
+  DocumentPropertiesUnavailableError,
   getConfig,
-  initializeLastProcessedRow,
+  initializeSettledThrough,
   isColumnMappingComplete,
   isConfigComplete,
   saveConfig,
@@ -16,17 +17,20 @@ import {
   UNMAPPED_OPTION,
 } from '../mapping/leadMapper';
 import {
+  handleReprocessUnsent as runReprocessUnsent,
+  processLastRow,
+} from '../triggers/onChangeHandler';
+import {
+  removeAllIntegrationTriggers,
+  setupAllIntegrationTriggers,
+} from '../triggers/triggerManager';
+import {
   ColumnMappings,
   DEFAULT_SHEET_NAME,
   HISTORY_SHEET_NAME,
   IntegrationConfig,
   MappableLeadField,
 } from '../types';
-import {processLastRow} from '../triggers/onChangeHandler';
-import {
-  removeChangeTrigger,
-  setupChangeTrigger,
-} from '../triggers/triggerManager';
 import {
   showErrorToast,
   showInfoToast,
@@ -167,8 +171,8 @@ function buildStatusSection(
     'Credenciais: preenchidas' :
     'Credenciais: incompletas';
 
-  const lastProcessedText = config.lastProcessedRow > 0 ?
-    `Última linha processada: ${config.lastProcessedRow}` :
+  const lastProcessedText = config.settledThrough > 0 ?
+    `Cursor settledThrough: ${config.settledThrough}` :
     'Nenhuma linha processada ainda.';
 
   section.addWidget(
@@ -387,6 +391,13 @@ function buildActionsSection(): GoogleAppsScript.Card_Service.CardSection {
       )
       .addWidget(
           CardService.newTextButton()
+              .setText('Reprocessar não enviados (50)')
+              .setOnClickAction(
+                  CardService.newAction().setFunctionName('handleReprocessUnsent'),
+              ),
+      )
+      .addWidget(
+          CardService.newTextButton()
               .setText('Abrir histórico')
               .setOnClickAction(
                   CardService.newAction().setFunctionName('handleOpenHistory'),
@@ -543,13 +554,14 @@ export function handleSaveConfiguration(
     const previous = getConfig();
     saveConfig(draft);
 
-    let initializedRow = previous.lastProcessedRow;
-    if (previous.lastProcessedRow === 0) {
-      initializedRow = initializeLastProcessedRow();
+    let initializedRow = previous.settledThrough;
+    if (previous.settledThrough === 0 && previous.lastProcessedRow === 0) {
+      initializedRow = initializeSettledThrough();
     }
 
     ensureHistorySheet();
-    const triggerOk = setupChangeTrigger();
+    const spreadsheet = getActiveSpreadsheetSafe();
+    const triggerOk = setupAllIntegrationTriggers(spreadsheet || undefined);
     if (!triggerOk) {
       saveConfig({enabled: false});
       logWarn('ui', 'Configuração salva, mas trigger onChange não foi criado');
@@ -572,7 +584,7 @@ export function handleSaveConfiguration(
     logInfo(
         'ui',
         `Configuração salva e ativada | aba=${sheetName} | ` +
-        `lastProcessedRow=${initializedRow}`,
+        `settledThrough=${initializedRow}`,
     );
     showSuccessToast('Configuração salva e integração ativada.');
 
@@ -587,6 +599,13 @@ export function handleSaveConfiguration(
   } catch (error) {
     const message = errorMessage(error);
     logError('ui', `Falha ao salvar configuração | ${message}`);
+    if (error instanceof DocumentPropertiesUnavailableError) {
+      showErrorToast(
+          'Não foi possível gravar a configuração neste documento. ' +
+          'Abra o add-on a partir da planilha e autorize novamente.',
+      );
+      return notificationResponse('DocumentProperties indisponível.');
+    }
     showErrorToast('Não foi possível salvar a configuração. Tente novamente.');
     return notificationResponse('Não foi possível salvar a configuração.');
   }
@@ -595,7 +614,7 @@ export function handleSaveConfiguration(
 export function handleDisableIntegration(): GoogleAppsScript.Card_Service.ActionResponse {
   try {
     saveConfig({enabled: false});
-    removeChangeTrigger();
+    removeAllIntegrationTriggers();
     logInfo('ui', 'Integração desativada pelo usuário');
     showInfoToast('Integração desativada.');
 
@@ -673,11 +692,9 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
       return notificationResponse('Não há linhas de dados para reprocessar.');
     }
 
-    saveConfig({lastProcessedRow: lastRow - 1});
-    const result = processLastRow(undefined, 'Reprocessar');
+    const result = processLastRow(spreadsheet, 'Reprocessar');
 
     if (result.success) {
-      saveConfig({lastProcessedRow: lastRow});
       if (result.outcome === 'duplicate') {
         logInfo('ui', `Reprocessamento concluído (duplicado) | linha=${lastRow} | ${result.message}`);
         showInfoToast(result.message);
@@ -703,6 +720,41 @@ export function handleReprocessLastRow(): GoogleAppsScript.Card_Service.ActionRe
     logError('ui', `Falha no reprocessamento | ${message}`);
     showErrorToast('Não foi possível reprocessar a última linha.');
     return notificationResponse('Não foi possível reprocessar a última linha.');
+  }
+}
+
+export function handleReprocessUnsent(): GoogleAppsScript.Card_Service.ActionResponse {
+  try {
+    const config = getConfig();
+    if (!isConfigComplete(config)) {
+      return notificationResponse('Configure a integração antes de reprocessar.');
+    }
+
+    const summary = runReprocessUnsent();
+    const text =
+      `Reprocessamento: enviados=${summary.sent}, já cadastrados=${summary.duplicates}, ` +
+      `incompletos=${summary.skipped}, erros=${summary.errors}, pendentes=${summary.pending}.`;
+
+    logInfo('ui', text);
+    if (summary.sent > 0 || summary.duplicates > 0) {
+      showSuccessToast(text);
+    } else if (summary.errors > 0 || summary.authBlocked) {
+      showErrorToast(text);
+    } else {
+      showInfoToast(text);
+    }
+
+    return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText(text))
+        .setNavigation(
+            CardService.newNavigation().updateCard(buildHomepageCard()),
+        )
+        .build();
+  } catch (error) {
+    const message = errorMessage(error);
+    logError('ui', `Falha no reprocessamento em lote | ${message}`);
+    showErrorToast('Não foi possível reprocessar os não enviados.');
+    return notificationResponse('Não foi possível reprocessar os não enviados.');
   }
 }
 
