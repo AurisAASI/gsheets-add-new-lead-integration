@@ -33,6 +33,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: prod
+    env:
+      # Deployment ID configured in the Workspace Marketplace SDK.
+      # clasp deploy without --deploymentId creates a new deployment the listing does not use.
+      MARKETPLACE_DEPLOYMENT_ID: AKfycbwkusGjBxAvx2A0PLOkxdIhv1ZX_0As4kjEpPS30EHLA-ao3KWJWNtd-wSnWXnR7WY
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +57,8 @@ jobs:
       - name: Push to Apps Script (PROD)
         run: npx clasp -P .clasp.prod.json push --force
 
-      - name: Deploy version
+      - name: Deploy version to Marketplace deployment
         run: |
           npx clasp -P .clasp.prod.json deploy \
+            --deploymentId "$MARKETPLACE_DEPLOYMENT_ID" \
             --description "CI deploy ${GITHUB_SHA::7} $(date -u +%Y-%m-%dT%H:%M:%SZ)"
