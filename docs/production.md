@@ -18,16 +18,18 @@ npm run deploy:prod
 Este comando:
 1. Compila o código (`npm run build`)
 2. Faz push para o projeto PROD (`clasp push`)
-3. Cria uma nova versão implantada (`clasp deploy`)
+3. Cria uma versão nova e atualiza a implantação que o Marketplace SDK já usa (`clasp deploy --deploymentId`)
 
-**Importante:** `clasp push` atualiza apenas `@HEAD`. Usuários do Marketplace veem a versão de um **`clasp deploy`**. Sempre execute deploy após push em produção.
+**Importante:** `clasp push` atualiza apenas `@HEAD`. Usuários do Marketplace veem a implantação configurada no SDK. O ID fixo é `AKfycbwkusGjBxAvx2A0PLOkxdIhv1ZX_0As4kjEpPS30EHLA-ao3KWJWNtd-wSnWXnR7WY`. `clasp deploy` sem `--deploymentId` cria outra implantação e o listing continua na anterior.
 
 ### Versionamento manual
 
 ```bash
 npm run push:prod
 clasp -P .clasp.prod.json version "Descrição da versão"
-clasp -P .clasp.prod.json deploy --description "v1.0.0 - descrição"
+clasp -P .clasp.prod.json deploy \
+  --deploymentId AKfycbwkusGjBxAvx2A0PLOkxdIhv1ZX_0As4kjEpPS30EHLA-ao3KWJWNtd-wSnWXnR7WY \
+  --description "v1.0.0 - descrição"
 ```
 
 ## CI/CD com GitHub Actions
@@ -37,7 +39,7 @@ O workflow em [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) 
 | Branch | Job | Ação |
 |--------|-----|------|
 | `develop` | `deploy-dev` | `clasp push` no projeto DEV |
-| `main` | `deploy-prod` | `clasp push` + `clasp deploy` no projeto PROD |
+| `main` | `deploy-prod` | `clasp push` + `clasp deploy --deploymentId` na implantação do Marketplace |
 
 Fluxo recomendado: feature → PR para `develop` → testes em DEV → PR `develop` → `main` → aprovação → PROD.
 
